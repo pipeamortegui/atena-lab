@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atena Lab — Design · Intelligence · Technology</title>
+  <meta name="description" content="Atena Lab: design, intelligence and technology.">
+  <meta name="theme-color" content="#050505">
+  <meta property="og:title" content="Atena Lab">
+  <meta property="og:description" content="Design · Intelligence · Technology">
+  <meta property="og:image" content="assets/marca/logo-atena-lab.webp">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Michroma&family=Manrope:wght@300;400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Logotipo vectorial (aproximación del logo de marca; se reutiliza con <use>) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="metal" x1="0" y1="0" x2="0" y2="100" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#ffffff"/>
+        <stop offset=".45" stop-color="#d6d6d6"/>
+        <stop offset=".56" stop-color="#8c8c8c"/>
+        <stop offset="1" stop-color="#f0f0f0"/>
+      </linearGradient>
+      <symbol id="wordmark" viewBox="0 -8 1152 112">
+        <g fill="none" stroke="url(#metal)" stroke-width="9" stroke-linejoin="miter">
+          <!-- ATENA -->
+          <path d="M3.5,100 L60,8 L116.5,100"/>
+          <path d="M14,100 Q60,-2 106,100" stroke-width="1.6" opacity=".55"/>
+          <path d="M154,3.5 H264 M209,3.5 V100"/>
+          <path d="M398,3.5 H316 Q301.5,3.5 301.5,18 V82 Q301.5,96.5 316,96.5 H398 M301.5,50 H388"/>
+          <path d="M435.5,100 V8 L544.5,92 V0"/>
+          <path d="M585.5,100 L642,8 L698.5,100"/>
+          <path d="M596,100 Q642,-2 688,100" stroke-width="1.6" opacity=".55"/>
+        </g>
+        <g fill="none" stroke="url(#metal)" stroke-width="6" stroke-linejoin="miter" opacity=".72">
+          <!-- LAB -->
+          <path d="M775.5,0 V96.5 H862"/>
+          <path d="M899.5,100 L956,8 L1012.5,100"/>
+          <path d="M910,100 Q956,-2 1002,100" stroke-width="1.4" opacity=".55"/>
+          <path d="M1049.5,96.5 V3.5 H1118 Q1140,3.5 1140,25.75 Q1140,48 1118,48 H1049.5 M1118,48 H1124 Q1146.5,48 1146.5,72.25 Q1146.5,96.5 1124,96.5 H1049.5"/>
+        </g>
+      </symbol>
+    </defs>
+  </svg>
+
+  <header class="top">
+    <a class="brand" href="#inicio" aria-label="Atena Lab — inicio">
+      <svg class="wordmark" role="img" aria-label="Atena Lab"><use href="#wordmark"/></svg>
+    </a>
+    <button class="menu-toggle" aria-expanded="false" aria-controls="menu" aria-label="Menu">
+      <span></span><span></span>
+    </button>
+    <nav id="menu" class="menu">
+      <a href="#work">Work</a>
+      <a href="#research">Research</a>
+      <a href="#lab">Lab</a>
+      <a href="#about">About</a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="inicio" class="hero">
+      <canvas id="onda" aria-hidden="true"></canvas>
+      <div class="hero-text">
+        <h1>
+          <span>Design</span>
+          <span>Intelligence</span>
+          <span>Technology</span>
+        </h1>
+        <a class="arrow" href="#work" aria-label="Go to work">
+          <svg viewBox="0 0 72 24" aria-hidden="true"><path d="M0,12 H70 M58,1 L70,12 L58,23" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        </a>
+      </div>
+    </section>
+
+    <section id="work" class="block">
+      <p class="label">01 — Work</p>
+      <h2 class="metal">Work</h2>
+      <p class="placeholder">Coming soon.</p>
+    </section>
+
+    <section id="research" class="block">
+      <p class="label">02 — Research</p>
+      <h2 class="metal">Research</h2>
+      <p class="placeholder">Coming soon.</p>
+    </section>
+
+    <section id="lab" class="block">
+      <p class="label">03 — Lab</p>
+      <h2 class="metal">Lab</h2>
+      <p class="placeholder">Coming soon.</p>
+    </section>
+
+    <section id="about" class="block">
+      <p class="label">04 — About</p>
+      <h2 class="metal">About</h2>
+      <p class="placeholder">Coming soon.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <svg class="wordmark small" role="img" aria-label="Atena Lab"><use href="#wordmark"/></svg>
+    <p class="tagline">Design · Intelligence · Technology</p>
+    <p class="copy">© <span id="year"></span> Atena Lab</p>
+  </footer>
+
+  <script src="js/onda.js" defer></script>
+  <script src="js/main.js" defer></script>
+</body>
+</html>
