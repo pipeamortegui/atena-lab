@@ -1,10 +1,23 @@
 /* Atena Lab — hoja de estilos principal */
+
+/* Atena Sans: tipografía de marca (assets/fuentes/). La lisa pesa unos 8 KB por peso. */
+@font-face { font-family: "Atena Sans"; font-weight: 100; font-display: swap; src: url("../assets/fuentes/AtenaSans-Thin.woff2") format("woff2"); }
+@font-face { font-family: "Atena Sans"; font-weight: 300; font-display: swap; src: url("../assets/fuentes/AtenaSans-Light.woff2") format("woff2"); }
+@font-face { font-family: "Atena Sans"; font-weight: 400; font-display: swap; src: url("../assets/fuentes/AtenaSans-Regular.woff2") format("woff2"); }
+@font-face { font-family: "Atena Sans"; font-weight: 500; font-display: swap; src: url("../assets/fuentes/AtenaSans-Medium.woff2") format("woff2"); }
+@font-face { font-family: "Atena Sans"; font-weight: 600; font-display: swap; src: url("../assets/fuentes/AtenaSans-SemiBold.woff2") format("woff2"); }
+@font-face { font-family: "Atena Sans"; font-weight: 700; font-display: swap; src: url("../assets/fuentes/AtenaSans-Bold.woff2") format("woff2"); }
+/* Atena Sans Metal: la misma letra con cuerpo metálico (fuente de color, unos 145 KB por peso). */
+@font-face { font-family: "Atena Sans Metal"; font-weight: 400; font-display: swap; src: url("../assets/fuentes/AtenaSansMetal-Regular.woff2") format("woff2"); }
+@font-face { font-family: "Atena Sans Metal"; font-weight: 600; font-display: swap; src: url("../assets/fuentes/AtenaSansMetal-SemiBold.woff2") format("woff2"); }
+
 :root {
   --bg: #050505;
   --ink: #ededed;
   --muted: #8a8a8a;
   --line: rgba(255, 255, 255, .12);
-  --display: "Michroma", "Eurostile", "Segoe UI", sans-serif;
+  --display: "Atena Sans", "Eurostile", "Segoe UI", sans-serif;
+  --display-metal: "Atena Sans Metal", "Atena Sans", "Eurostile", "Segoe UI", sans-serif;
   --body: "Manrope", "Segoe UI", system-ui, sans-serif;
   --gutter: clamp(16px, 4vw, 64px);
   --metal: linear-gradient(180deg, #ffffff 0%, #dedede 42%, #8e8e8e 54%, #f4f4f4 100%);
@@ -23,7 +36,10 @@ body {
 }
 a { color: inherit; text-decoration: none; }
 
+/* Texto metálico: lo pinta la propia fuente de color. El degradado de fondo queda de respaldo
+   para los navegadores que no dibujan fuentes de color (ahí la letra se ve lisa con el degradado). */
 .metal {
+  font-family: var(--display-metal);
   background: var(--metal);
   -webkit-background-clip: text;
   background-clip: text;
@@ -37,8 +53,8 @@ a { color: inherit; text-decoration: none; }
   padding: clamp(18px, 3vw, 40px) var(--gutter);
   background: linear-gradient(180deg, rgba(5,5,5,.85), rgba(5,5,5,0));
 }
-.wordmark { display: block; width: clamp(150px, 22vw, 300px); aspect-ratio: 1152 / 112; }
-.wordmark.small { width: 180px; }
+.wordmark { display: block; width: clamp(170px, 24vw, 330px); height: auto; aspect-ratio: 3009 / 220; }
+.wordmark.small { width: 200px; }
 
 .menu { display: flex; gap: clamp(24px, 4vw, 64px); }
 .menu a {
@@ -73,6 +89,7 @@ a { color: inherit; text-decoration: none; }
 }
 .hero h1 span {
   display: block;
+  font-family: var(--display-metal);
   background: var(--metal);
   -webkit-background-clip: text;
   background-clip: text;
@@ -99,7 +116,7 @@ a { color: inherit; text-decoration: none; }
   color: var(--muted);
 }
 .block h2 {
-  font-family: var(--display); font-weight: 400;
+  font-family: var(--display-metal); font-weight: 400;
   font-size: clamp(1.8rem, 4vw, 3.4rem);
   text-transform: uppercase; letter-spacing: .04em;
   margin: 18px 0 24px;
