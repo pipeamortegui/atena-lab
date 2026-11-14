@@ -1,0 +1,176 @@
+/* Atena Lab — barra de proyectos curva (sección Work)
+   Usa las variables de css/style.css. Los datos están en js/proyectos-datos.js
+   y el movimiento en js/proyectos.js.
+
+   Hay dos estados:
+   1) Base: una fila de tarjetas que se desplaza de lado (lo que se ve sin JavaScript).
+   2) .es-3d: el arco con perspectiva. Esa clase la pone js/proyectos.js cuando todo cargó bien. */
+
+.pb {
+  /* Tamaño de la tarjeta: manda el ancho; el alto sale de la proporción 5:7. */
+  --pb-w: clamp(170px, min(24vw, 38vh), 440px);
+  --pb-h: calc(var(--pb-w) * 1.4);
+  --pb-radio: calc(var(--pb-w) * .07);
+  --pb-aire: 36px;
+  position: relative;
+  /* A sangre: deshace el margen lateral de la sección para que el arco llegue a los bordes de la pantalla. */
+  margin: 0 calc(-1 * var(--gutter)) 0 calc(-1 * (var(--gutter) + clamp(0px, 3vw, 48px)));
+}
+
+/* ---------- Estado base: fila que se desplaza ---------- */
+.pb-stage { position: relative; }
+.pb-track {
+  list-style: none;
+  display: flex; gap: 16px;
+  padding: 24px var(--gutter);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .25) transparent;
+}
+.pb-item {
+  flex: 0 0 var(--pb-w);
+  width: var(--pb-w); height: var(--pb-h);
+  scroll-snap-align: center;
+}
+
+/* ---------- Tarjeta ---------- */
+.pb-card {
+  position: relative; display: block; isolation: isolate;
+  width: 100%; height: 100%;
+  padding: 0; border: 0; border-radius: var(--pb-radio);
+  overflow: hidden;
+  background: #0b0b0b; color: var(--ink);
+  font: inherit; text-align: left;
+  box-shadow: 0 34px 60px -34px #000;
+  transition: box-shadow .6s cubic-bezier(.22, 1, .36, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+.pb-card img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  -webkit-user-drag: none; user-select: none;
+}
+/* Degradado inferior: hace legible el título sobre cualquier imagen. */
+.pb-card::before {
+  content: ""; position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(180deg, rgba(5, 5, 5, 0) 46%, rgba(5, 5, 5, .62) 74%, rgba(5, 5, 5, .94) 100%);
+}
+/* Vidrio: borde fino claro y un brillo suave en la esquina. */
+.pb-card::after {
+  content: ""; position: absolute; inset: 0; z-index: 4;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, .2);
+  background: linear-gradient(140deg, rgba(255, 255, 255, .13) 0%, rgba(255, 255, 255, 0) 30%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28);
+  pointer-events: none;
+}
+.pb-cap {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+  display: grid; gap: .5em;
+  padding: calc(var(--pb-w) * .085);
+}
+.pb-titulo {
+  font-family: var(--display); font-weight: 500;
+  font-size: clamp(.9rem, calc(var(--pb-w) * .064), 1.6rem);
+  line-height: 1.2; letter-spacing: .12em; text-transform: uppercase;
+  text-shadow: 0 1px 14px rgba(0, 0, 0, .7);
+}
+.pb-dato {
+  font-family: var(--display);
+  font-size: clamp(.56rem, calc(var(--pb-w) * .032), .74rem);
+  letter-spacing: .3em; text-transform: uppercase;
+  color: rgba(237, 237, 237, .74);
+}
+/* Velo: oscurece las tarjetas a medida que se alejan del centro (lo gradúa el JS con --pb-velo). */
+.pb-velo {
+  position: absolute; inset: 0; z-index: 3;
+  background: var(--bg);
+  opacity: var(--pb-velo, 0);
+  pointer-events: none;
+}
+/* Texto solo para lectores de pantalla (anuncia el proyecto activo). */
+.pb-voz {
+  position: absolute; width: 1px; height: 1px; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.pb-card:focus-visible { outline: 2px solid #fff; outline-offset: 5px; }
+
+/* ---------- Estado 3D: el arco ---------- */
+.pb.es-3d .pb-stage {
+  height: calc(var(--pb-h) + 2 * var(--pb-aire));
+  overflow: hidden;
+  touch-action: pan-y;          /* el dedo en vertical sigue moviendo la página */
+  user-select: none; -webkit-user-select: none;
+  cursor: grab;
+}
+.pb.es-3d .pb-card { cursor: pointer; }
+.pb.es-3d.arrastrando .pb-stage { cursor: grabbing; }
+.pb.es-3d.arrastrando .pb-card { cursor: grabbing; }
+/* Resplandor tenue detrás de la tarjeta central. */
+.pb.es-3d .pb-stage::before {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: calc(var(--pb-w) * 3.4); height: calc(var(--pb-h) * 1.15);
+  transform: translate(-50%, -50%);
+  background: radial-gradient(closest-side, rgba(255, 255, 255, .075), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+.pb.es-3d .pb-track {
+  position: absolute; inset: 0;
+  display: block; padding: 0;
+  overflow: visible; scroll-snap-type: none;
+  perspective-origin: 50% 50%;   /* la distancia de perspectiva la pone el JS según el ancho de la tarjeta */
+}
+.pb.es-3d .pb-item {
+  position: absolute; left: 50%; top: 50%;
+  margin: calc(var(--pb-h) / -2) 0 0 calc(var(--pb-w) / -2);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+.pb.es-3d .pb-item.es-activa .pb-card {
+  box-shadow: 0 44px 80px -36px #000, 0 0 110px -28px rgba(255, 255, 255, .26);
+}
+.pb.es-3d .pb-item:not(.es-activa) .pb-card:hover .pb-velo { opacity: calc(var(--pb-velo, 0) * .55); }
+
+/* ---------- Controles: anterior · contador · siguiente ---------- */
+.pb-controles { display: none; }
+.pb.es-3d .pb-controles {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: max-content; margin: 4px auto 0; padding: 5px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: rgba(255, 255, 255, .035);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
+.pb-btn {
+  display: grid; place-items: center;
+  width: 40px; height: 40px;
+  border: 1px solid transparent; border-radius: 50%;
+  background: transparent; color: var(--ink);
+  cursor: pointer;
+  transition: background .3s, border-color .3s;
+}
+.pb-btn:hover { background: rgba(255, 255, 255, .08); border-color: var(--line); }
+.pb-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.pb-btn svg { display: block; width: 15px; height: 15px; }
+.pb-contador {
+  min-width: 8.5em; text-align: center;
+  font-family: var(--display); font-size: .72rem;
+  letter-spacing: .3em; text-indent: .3em;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.pb-contador .pb-actual { color: var(--ink); }
+
+/* ---------- Celular ---------- */
+@media (max-width: 760px) {
+  .pb {
+    --pb-w: clamp(150px, min(72vw, 58vh), 340px);
+    --pb-aire: 28px;
+    margin-left: calc(-1 * var(--gutter));
+  }
+  .pb-btn { width: 44px; height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-card, .pb-btn { transition: none; }
+}
