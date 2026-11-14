@@ -1,0 +1,27 @@
+/* Atena Lab — el titular se mueve con el patrón.
+   js/titular.js parte cada línea del titular en letras (.tl-letra) y las mueve solo con
+   transform y opacity. Sin JavaScript nada de esto se aplica y el titular queda como siempre. */
+
+/* Cada letra es una cajita en línea: así se puede desplazar e inclinar sin mover a las demás.
+   El degradado de respaldo (para navegadores sin fuentes de color) ya le llega a cada letra por
+   la regla general «.hero h1 span» de style.css; aquí solo se le quita el «display: block». */
+.hero h1 .tl-letra {
+  display: inline-block;
+  transform-origin: 50% 60%;
+}
+
+/* La línea ya no pinta el degradado: lo pinta cada letra (si lo pintara la línea, recortado al
+   texto, se quedaría quieto mientras las letras se mueven). */
+.hero h1 .tl-linea { background: none; }
+
+/* Solo mientras algo se mueve: que el navegador tenga las letras listas para animar.
+   (Sin «transition»: se probó y encarece diez veces cada cuadro.) */
+.hero h1.tl-activo .tl-letra { will-change: transform, opacity; }
+
+/* Entrada al cargar. Con JavaScript activo el titular arranca oculto para que las letras entren
+   sin un parpadeo previo; js/titular.js lo destapa enseguida poniendo «tl-listo» en el h1.
+   Si ese archivo no llegara a cargar, el titular aparece solo a los 2,5 s. */
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  .hero h1:not(.tl-listo) > span { animation: tl-espera .5s 2.5s both; }
+}
+@keyframes tl-espera { from { opacity: 0; } to { opacity: 1; } }

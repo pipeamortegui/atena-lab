@@ -1008,6 +1008,37 @@
       lienzo: `${canvas.width}×${canvas.height}`, dibujo: gl ? 'WebGL' : 'Canvas 2D',
       desvioMaximoPx: +desvio().toFixed(2), calidad: +calidad.toFixed(2), enMarcha: running,
     }),
+    // Para que otros elementos de la portada (el titular) se muevan con el patrón como un solo
+    // sistema: qué empuje recibiría en este cuadro una partícula en el punto (x, y) del lienzo.
+    // Deja en «out» el desplazamiento al que tiende (x, y, en px), cuánto la alcanza el anillo de
+    // una onda (anillo, de 0 a 1) y si algo la está tocando (toca). Mismas fórmulas que la física.
+    fuerzaEn(x, y, out) {
+      let fx = 0, fy = 0, anillo = 0, toca = false;
+      if (ptr.on) {
+        const e = P.empuje, R = Math.max(60, e.radio * Math.min(W, H));
+        const ex = x - ptr.x, ey = y - ptr.y, d = Math.sqrt(ex * ex + ey * ey) + 0.01;
+        if (d < R) {
+          let w = 1 - d / R; w *= w;
+          fx = (ex / d) * e.fuerza * R * w + ptr.vx * e.arrastre * w;
+          fy = (ey / d) * e.fuerza * R * w + ptr.vy * e.arrastre * w;
+          toca = true;
+        }
+      }
+      const A = P.choque.fuerza * diag * 1.8, anc = 1 / (P.choque.ancho * diag);
+      for (let o = 0; o < nOndas; o++) {
+        const ex = x - oX[o], ey = y - oY[o], d = Math.sqrt(ex * ex + ey * ey) + 0.01;
+        const u = (d - oR[o]) * anc;
+        if (u > -2.6 && u < 2.6) {
+          const band = Math.exp(-u * u) * oA[o];
+          fx += (ex / d) * band * A; fy += (ey / d) * band * A;
+          anillo += band; toca = true;
+        }
+      }
+      out.x = fx; out.y = fy; out.anillo = anillo; out.toca = toca;
+      return out;
+    },
+    hayOndas: () => ondas.length > 0, // ¿queda alguna onda de choque viva?
+    carga: () => msMedia,             // ms que cuesta calcular cada cuadro del patrón (media): mide lo rápido que es el equipo
   };
 
   // Con «reducir movimiento»: un cuadro quieto, sin interacción animada
@@ -1031,6 +1062,7 @@
   const chocar = () => {
     if (ondas.length >= P.choque.maximo) ondas.shift();
     ondas.push({ x: ptr.x, y: ptr.y, t0: performance.now() });
+    window.dispatchEvent(new CustomEvent('atena:onda', { detail: { x: ptr.x, y: ptr.y } })); // aviso a quien quiera moverse con ella
   };
   let toque = null; // para distinguir un toque de un arrastre
 
