@@ -56,14 +56,31 @@
     hilosEnves: 14,            // hilos del envés
     muestras: 96,              // partículas por línea
     grosor: 1.2,               // grosor de línea en px
-    abanico: 1.35,             // > 1: las líneas del abanico se juntan hacia el pliegue
+    abanico: 1.0,              // > 1: las líneas del abanico se juntan hacia el pliegue (1 = parejas, como la referencia)
     ondulacion: 0.004,         // vaivén de las líneas del envés
-    aPuntos: [0.50, 0.63],     // tramo de x donde las líneas se apagan y quedan los puntos
+    // dónde pasa cada fila de línea a puntos: no todas a la vez (no hay frontera)
+    transicion: {
+      desde: 0.52,             // x donde empiezan a romperse las filas del centro
+      bordes: 0.06,            // las filas de los bordes siguen siendo línea este tanto más
+      largo: 0.10,             // tramo en que una fila se va rompiendo
+      enves: 0.465,            // el haz que cruza se rompe nada más salir del cruce
+      azar: 0.03,              // desorden entre filas
+    },
+    envesMin: 0.022,           // alto mínimo del haz de arriba al entrar al nudo (así no se cierra en un pico)
     resplandor: 0.14,          // brillo difuso a lo largo de los dos bordes
-    nucleo: 0.32,              // blanco macizo del nudo (0 = solo líneas)
+    // resplandor del nudo: pegado al borde de arriba del haz, no una nube alrededor
+    resplandorNudo: { cerca: 0.12, ancho: 46, fuera: 0.5, anchoFuera: 60, debajo: 0.2, amplio: 0.21, radio: 190 }, // ceñido al borde, y unas luces suaves alrededor
+    // Tope de luz: donde las líneas se amontonan, su luz se reparte en vez de sumarse hasta el
+    // blanco. Es el brillo máximo que puede dar cada familia por unidad de alto (0..1).
+    brillo: {
+      principal: [0.70, 0.78], // hoja principal: en su borde de arriba y en el de abajo
+      enves: 0.12,             // el haz que cruza el nudo
+      puntos: 0.62,            // las filas de puntos junto al nudo
+    },
+    moire: [1.2, 2.2],         // líneas a esta distancia (px) se ensanchan y suavizan: así no hacen moiré
 
     // — Superficie de puntos (tramo derecho) —
-    puntosX: [0.47, 1.16],     // de dónde a dónde corren las filas de puntos
+    puntosX: [0.44, 1.16],     // de dónde a dónde corren las filas de puntos
     puntosCentro: 140,         // puntos por fila en el centro de la superficie
     puntosBorde: 340,          // puntos por fila en los bordes (diminutos y juntos: parecen línea)
     crecerCentro: 0.20,        // menor = los puntos se separan más al alejarse del nudo (centro)
@@ -71,8 +88,10 @@
     pliegue: 0.64,             // cuánto se aprietan las filas contra los dos bordes (0 = parejas)
     radio: [0.5, 2.8],         // radio del punto: mínimo, y lo que crece lejos del nudo
     bajoAncho: 0.17,           // hasta dónde cuelga el envés bajo el filo en el borde derecho
-    puntosBajo: 64,            // puntos por fila del envés
-    radioBajo: 2.1,            // radio de los puntos del envés
+    bajoMin: 0.006,            // alto del envés justo al salir del nudo (filas finas y juntas)
+    puntosBajo: 70,            // puntos por fila del envés
+    qBajo: 0.30,               // menor = los puntos del envés más juntos junto al nudo
+    radioBajo: 2.1,            // radio de los puntos del envés (lejos del nudo)
     dispersion: 0.45,          // cuántos puntos se apagan al azar en el extremo derecho
     temblor: 3.5,              // desorden (px) de los puntos en el extremo derecho
 
@@ -80,9 +99,6 @@
     velocidad: 0.35,           // reloj general
     deriva: 0.010,             // los puntos fluyen despacio hacia la derecha
     respiracion: 0.010,        // ondulación lenta de la superficie
-
-    // — Halo del nudo —
-    halo: 0.22,
 
     // — Mouse: empuje local —
     empuje: {
@@ -166,7 +182,6 @@
   const DER = tabla();  // peso de la parte derecha para las deformaciones
   const IZQ = tabla();  // peso del abanico
   const GX = tabla();   // crecimiento del punto al alejarse del nudo
-  const ENT = tabla();  // aparición de los puntos junto al nudo
   const CAE = tabla();  // apagado al azar en el extremo derecho
   const TEM = tabla();  // desorden en el extremo derecho
   const BAJ = tabla();  // cuánto cuelga el envés bajo el filo
@@ -181,10 +196,9 @@
       DER[k] = smooth(0.46, 0.82, x);
       IZQ[k] = 1 - smooth(0.26, 0.41, x);
       GX[k] = Math.pow(clamp01((x - 0.49) / 0.46), 0.8);
-      ENT[k] = smooth(P.puntosX[0] + 0.005, P.puntosX[0] + 0.125, x);
       CAE[k] = P.dispersion * smooth(0.80, 1.04, x);
       TEM[k] = smooth(0.62, 1.05, x);
-      BAJ[k] = P.bajoAncho * Math.pow(clamp01((x - 0.44) / 0.56), 0.9);
+      BAJ[k] = P.bajoMin + P.bajoAncho * Math.pow(clamp01((x - 0.44) / 0.56), 1.25);
     }
   }
   // Curvas del cuadro actual (ya deformadas) y las de cada eco
@@ -215,9 +229,12 @@
   let hEnves, hSI, hSD, hW, hBorde;            // por línea: ¿envés?, reparto izq./der., posición, ¿borde?
   let lX, lA;                                  // por muestra: x de diseño y alfa
   let lhx, lhy, ldx, ldy, lvx, lvy, lgl, lpx, lpy;
+  let hF0;                                     // por línea: x donde empieza a romperse en puntos
+  let lMed, lS, lSd, lAf, lFw, lK;             // por muestra: medio ancho, separación (en casa / dibujada), alfa final, ensanche, entereza
+  let idxP, idxE;                              // de x de diseño a número de muestra (hoja principal / envés)
   // Puntos: nFil filas, cada una con su número de puntos
   let nFil = 0, nD = 0;
-  let fN, fIni, fQ, fTh, fEnves, fSI, fSD, fW, fG, fA, fFase, fNace; // por fila
+  let fN, fIni, fQ, fTh, fEnves, fSI, fSD, fW, fG, fA, fFase, fNace; // por fila (la fila r sigue a la línea r)
   let dRx, dRy, dRz, dRk;                                     // azar fijo de cada punto
   let dhx, dhy, ddx, ddy, dvx, dvy, dgl, dal, dra;
   let dX, dK, dFr, dS, dTb;                                   // dónde va cada punto sobre su fila (paso lento)
@@ -227,6 +244,37 @@
   const repDer = w => w * (1 - P.pliegue) + P.pliegue * (1 - Math.cos(Math.PI * w)) / 2;  // superficie
   // Escorzo de la superficie: 1 en el centro (de frente), pequeño en los bordes (de canto)
   const escorzo = w => Math.sin(Math.PI * w);
+  // Dónde cuelga cada fila del envés bajo el filo (0 = pegada al filo)
+  const sdEnves = w => 0.08 + 0.92 * w;
+
+  // Muestras de una línea, de x0 a x1: más juntas cerca del nudo, donde la forma se curva.
+  // Todas las líneas de una familia comparten las mismas x: así se puede medir cuánto se juntan.
+  function muestreo(x0, x1, n) {
+    const G = 800, cum = new Float32Array(G + 1);
+    for (let g = 1; g <= G; g++) {
+      const x = x0 + (x1 - x0) * (g - 0.5) / G;
+      cum[g] = cum[g - 1] + 1 + 2.6 * Math.exp(-(((x - 0.45) / 0.11) ** 2));
+    }
+    const out = new Float32Array(n);
+    for (let k = 0, g = 0; k < n; k++) {
+      const obj = cum[G] * k / (n - 1);
+      while (g < G - 1 && cum[g + 1] < obj) g++;
+      const fr = clamp01((obj - cum[g]) / ((cum[g + 1] - cum[g]) || 1));
+      out[k] = x0 + (x1 - x0) * (g + fr) / G;
+    }
+    return out;
+  }
+  // Tabla inversa: para cada columna de las tablas, en qué muestra (con fracción) cae; -1 si fuera
+  function indice(xs) {
+    const t = tabla(), n = xs.length;
+    for (let k = 0, j = 0; k <= K + 1; k++) {
+      const x = XA + k / KINV;
+      if (x < xs[0] || x > xs[n - 1]) { t[k] = -1; continue; }
+      while (j < n - 2 && xs[j + 1] < x) j++;
+      t[k] = j + (x - xs[j]) / ((xs[j + 1] - xs[j]) || 1);
+    }
+    return t;
+  }
 
   function construir() {
     semilla = 20261114;
@@ -239,56 +287,68 @@
 
     // — Líneas —
     hEnves = new Uint8Array(nLin); hSI = new Float32Array(nLin); hSD = new Float32Array(nLin);
-    hW = new Float32Array(nLin); hBorde = new Uint8Array(nLin);
+    hW = new Float32Array(nLin); hBorde = new Uint8Array(nLin); hF0 = new Float32Array(nLin);
     lX = new Float32Array(nL); lA = new Float32Array(nL);
     lhx = new Float32Array(nL); lhy = new Float32Array(nL);
     ldx = new Float32Array(nL); ldy = new Float32Array(nL);
     lvx = new Float32Array(nL); lvy = new Float32Array(nL);
     lgl = new Float32Array(nL); lpx = new Float32Array(nL); lpy = new Float32Array(nL);
-    const [p0, p1] = P.aPuntos;
+    lMed = new Float32Array(nL); lS = new Float32Array(nL); lSd = new Float32Array(nL);
+    lAf = new Float32Array(nL); lFw = new Float32Array(nL); lK = new Float32Array(nL);
+    const xsP = muestreo(-0.03, 1.10, M), xsE = muestreo(-0.03, 0.86, M);
+    idxP = indice(xsP); idxE = indice(xsE);
+    const tr = P.transicion;
     for (let l = 0, i = 0; l < nLin; l++) {
       const enves = l >= nA;
       const w = enves ? (l - nA) / (nB - 1) : l / (nA - 1);
       hEnves[l] = enves ? 1 : 0; hW[l] = w;
-      let x0 = -0.03, x1 = p1 + 0.01, cola = 0; // cola: cuánto sigue la línea más allá de los puntos
+      // dónde esta fila deja de ser línea y pasa a puntos (las de los bordes aguantan más)
+      const b2 = (2 * w - 1) ** 2;
+      // (el haz que cruza se rompe en puntos nada más salir del cruce: filas finas bajo el filo)
+      const f0 = enves ? tr.enves + 0.03 * w + tr.azar * 0.5 * (azar() - 0.5)
+                       : tr.desde + tr.bordes * b2 + tr.azar * (azar() - 0.5);
+      hF0[l] = f0;
+      const fin0 = f0, fin1 = f0 + (enves ? 0.05 : tr.largo);
+      let cola = 0; // cuánto sigue la línea más allá de donde nacen los puntos (bordes)
       if (enves) {
         hSI[l] = w * 0.93;          // a la izquierda: de la línea más alta (0) hacia el pliegue (1)
-        hSD[l] = 0.2 + 0.8 * w;     // a la derecha: cuánto cuelga bajo el filo
-        x1 = 0.475;
+        hSD[l] = sdEnves(w);        // a la derecha: cuánto cuelga bajo el filo
       } else {
         hSI[l] = repIzq(w); hSD[l] = repDer(w);
-        if (l === 0) { x1 = 0.92; cola = 1; hBorde[l] = 1; }                       // borde de arriba
-        else if (l === nA - 1) { x1 = 1.10; cola = 1; hBorde[l] = 1; }             // el filo
-        else if (l === nA - 2 || l === nA - 3) { x1 = 1.10; cola = 0.55; }         // dobles del filo
+        if (l === 0 || l === nA - 1) { cola = 1; hBorde[l] = 1; }      // borde de arriba y filo
+        else if (l === nA - 2 || l === nA - 3) cola = 0.55;            // dobles del filo
       }
+      const xs = enves ? xsE : xsP;
       for (let k = 0; k < M; k++, i++) {
-        const x = x0 + (x1 - x0) * k / (M - 1);
+        const x = xs[k];
         lX[i] = x;
         let a;
         if (enves) {
-          // tenues arriba, más vivas hacia el pliegue; las de arriba se apagan antes hacia la izquierda
+          // tenues arriba y lejos; más vivas al acercarse al nudo, que cruzan sin apagarse
           a = (0.2 + 0.5 * Math.pow(w, 1.3)) * smooth(0.17 - 0.17 * w, 0.35 - 0.22 * w, x);
-          a += 0.4 * smooth(0.36, 0.41, x);
-          a *= 1 - smooth(0.425, 0.468, x); // el envés se pierde dentro del nudo; a la derecha son solo puntos
+          a = Math.max(a, 0.75 * smooth(0.30, 0.40, x));
+          a *= 1 - 0.8 * w * smooth(0.41, 0.45, x); // al llegar al filo se apagan las de abajo: sin borde duro
+          // al cruzar el nudo el haz tiene los bordes suaves: su luz se funde con la del nudo, sin escalón
+          const suave = smooth(0, 0.35, w) * smooth(1, 0.65, w);
+          a *= 1 - (1 - suave) * smooth(0.34, 0.40, x);
+          a *= 1 - smooth(fin0, fin1, x);
         } else {
           // casi invisibles en el borde izquierdo, vivas al acercarse al nudo
           a = 0.07 + 0.88 * smooth(0.0, 0.25, x);
-          if (l % 2 === 1) a *= smooth(0.27, 0.39, x);     // en el abanico solo corre una de cada dos
           if (l === 0) a *= 0.35 + 0.65 * smooth(0.12, 0.30, x); // el pliegue solo brilla cerca del nudo
-          a += 0.25 * smooth(0.33, 0.43, x);               // el nudo: casi blanco puro
-          const fin = 1 - smooth(p0, p1, x);
+          const fin = 1 - smooth(fin0, fin1, x);
           if (cola > 0) {
             const lejos = l === 0 ? 1 - smooth(0.62, 0.90, x) : 1 - 0.35 * smooth(0.6, 1.0, x);
-            a *= Math.max(fin, cola * lejos);
+            a *= Math.max(fin, cola * lejos) * (x > (l === 0 ? 0.92 : 1.10) ? 0 : 1);
           } else a *= fin;
         }
         lA[i] = Math.min(1, a);
       }
     }
+    medidas();
 
     // — Puntos —
-    const filasB = Math.round(nB / 2);
-    nFil = nA + filasB;
+    nFil = nA + nB; // una fila de puntos por cada línea: la fila r sigue a la línea r
     fN = new Int32Array(nFil); fIni = new Int32Array(nFil + 1);
     fQ = new Float32Array(nFil); fTh = new Float32Array(nFil); fEnves = new Uint8Array(nFil);
     fSI = new Float32Array(nFil); fSD = new Float32Array(nFil); fW = new Float32Array(nFil);
@@ -305,16 +365,16 @@
         q = 1 / (1 / P.crecerBorde + (1 / P.crecerCentro - 1 / P.crecerBorde) * g);
         fA[r] = 0.8 + 0.2 * g;
       } else {
-        const w = (r - nA + 0.5) / filasB; // 0..1 hacia abajo
-        fEnves[r] = 1; fW[r] = w; fSD[r] = 0.2 + 0.8 * w;
+        const w = (r - nA) / (nB - 1); // 0..1 hacia abajo
+        fEnves[r] = 1; fW[r] = w; fSD[r] = sdEnves(w);
         fG[r] = 0.9 + 0.2 * azar();
-        fN[r] = Math.round(P.puntosBajo * (1 - 0.2 * w) * dens);
-        q = 0.30;
+        fN[r] = Math.round(P.puntosBajo * (1 - 0.3 * w) * dens);
+        q = P.qBajo;
         fA[r] = 0.95 - 0.25 * w;
-        // una de cada tres filas nace junto al nudo; las demás, más lejos, cuando ya caben
-        const j = r - nA;
-        fNace[r] = j % 3 === 0 ? 0.497 + 0.012 * j : 0.60 + 0.02 * j;
       }
+      // los puntos aparecen donde su línea empieza a romperse; en el envés, las filas de más abajo
+      // nacen más lejos: el haz de filas se abre desde el nudo
+      fNace[r] = hF0[r] - 0.035 + (r >= nA ? 0.22 * fW[r] * fW[r] : 0);
       fN[r] = Math.max(8, fN[r]);
       fQ[r] = q; fTh[r] = Math.atan(lx / q);
       fFase[r] = azar();          // cada fila arranca corrida: la trama no hace columnas
@@ -355,6 +415,7 @@
       esc = Math.max(0.72, Math.min(1.35, W / 1706));
     }
     if (antes !== narrow) construir();
+    medidas();
     todasLasFilas = true;
     if (gl) montarGL();
   }
@@ -380,7 +441,13 @@
     if (enves) {
       const cru = CRU[k];
       let y = 0;
-      if (cru < 1) { const u = Ut[k] + (Ut[k + 1] - Ut[k]) * fr; y += (u + (sup - u) * sI) * (1 - cru); }
+      if (cru < 1) {
+        // el haz va de su línea más alta (u) hacia el pliegue; su alto nunca llega a cero, así que
+        // entra al nudo como un haz (no se cierra en un pico) y lo cruza en diagonal
+        const u = Ut[k] + (Ut[k + 1] - Ut[k]) * fr, d = sup - u, hm = P.envesMin;
+        const h = 0.5 * (d + Math.sqrt(d * d + 4 * hm * hm));
+        y += (u + h * sI) * (1 - cru);
+      }
       if (cru > 0) y += (inf + sD * BAJ[k]) * cru;
       return y;
     }
@@ -404,6 +471,7 @@
         lhy[i] = oy + sy * y;
       }
     }
+    espaciado(lhx, lhy, lS); // cuánto se juntan las líneas (lo usan las filas de puntos)
   }
 
   // Los puntos, en dos pasos. El lento decide en qué x de su fila va cada punto (fluyen muy
@@ -417,23 +485,40 @@
     const n = fN[r], q = fQ[r], th = fTh[r], sI = fSI[r], sD = fSD[r];
     const g = fG[r], enves = fEnves[r], aFila = fA[r], w = fW[r], nace = fNace[r];
     const off = flujo + fFase[r] / n, rg = r1 * Math.sqrt(g), tbFila = tem * (enves ? 1.6 : 0.3 + 0.7 * g);
+    // tope de luz de esta fila (como el de su línea) y dónde leer cuánto se juntan las filas
+    const [b0, b1] = P.brillo.principal;
+    const Bm = P.brillo.puntos * (enves ? 1 : 1 - (1 - b1 / b0) * w);
+    const Nf = enves ? nLin - nPri : nPri, idx = enves ? idxE : idxP, base = r * M, kq = q * th * sx / n;
     let i = fIni[r];
     for (let j = 0; j < n; j++, i++) {
       let f = j / n + off; f -= f | 0;
-      const x = xp0 + q * Math.tan(th * f);
+      const tg = Math.tan(th * f), x = xp0 + q * tg;
       if (x > xFin) { dal[i] = 0; continue; } // punto fuera de la vista
-      const qq = (x - XA) * KINV, k = qq | 0;
-      // alfa: aparecen junto al nudo, se apagan al final y, al azar, en el extremo derecho
-      let a = aFila * (enves ? smooth(nace, nace + 0.03, x) : ENT[k]); // las filas del envés nacen escalonadas
+      const qq = (x - XA) * KINV, k = qq | 0, fr = qq - k;
+      // alfa: aparecen donde su línea se rompe, se apagan al final y, al azar, en el extremo derecho
+      let a = aFila * smooth(nace, nace + 0.06, x);
       if (f > 0.93) a *= 1 - smooth(0.93, 0.99, f);
       const cae = CAE[k] + (enves ? 0.02 + 0.26 * w * TEM[k] : 0);
       if (cae > 0.001) a *= smooth(cae - 0.07, cae + 0.07, dRz[i]);
+      if (a < 0.02) { dal[i] = 0; continue; } // punto apagado
+      const rad = (enves ? rB * g * (0.3 + 0.7 * smooth(0.45, 0.58, x)) : r0 + rg * GX[k]) * (0.82 + 0.3 * dRz[i]);
+      // donde los puntos y las filas se amontonan (junto al nudo) cada punto aporta menos luz:
+      // la fila se lee como una línea fina en vez de sumar blanco
+      const dlt = kq * (1 + tg * tg);                  // separación entre puntos de la fila, px
+      a *= Math.min(1, dlt / (2 * rad));
+      const ii = idx[k];
+      if (ii >= 0) {
+        const j0 = Math.min(M - 2, ii | 0), u = ii - j0;
+        const sF = lS[base + j0] * (1 - u) + lS[base + j0 + 1] * u; // separación entre filas, px
+        const wEq = Math.min(Math.PI * rad * rad / Math.max(dlt, 0.01), 2 * rad);
+        a *= Math.min(1, Bm * (sF + wEq / Nf) / wEq);
+      }
       dal[i] = a;
-      if (a < 0.02) continue; // punto apagado
-      dX[i] = x; dK[i] = k; dFr[i] = qq - k;
+      if (a < 0.02) continue;
+      dX[i] = x; dK[i] = k; dFr[i] = fr;
       dS[i] = enves ? sD : sI + (sD - sI) * MEZ[k];
       dTb[i] = tbFila * TEM[k];
-      dra[i] = (enves ? rB * g * (1.12 - 0.2 * GX[k]) : r0 + rg * GX[k]) * (0.82 + 0.3 * dRz[i]);
+      dra[i] = rad;
     }
   }
 
@@ -465,6 +550,79 @@
         }
         dhx[i] = bx + mx * dX[i] + dRx[i] * tb;
         dhy[i] = oy + sy * y + dRy[i] * tb;
+      }
+    }
+  }
+
+  // ─────────────────────── Tope de luz de las líneas ───────────────────────
+  // Medio ancho (px) de cada muestra de línea: el borde de arriba y el filo engordan desde el nudo
+  function medidas() {
+    if (!lMed) return;
+    for (let l = 0, i = 0; l < nLin; l++) {
+      for (let k = 0; k < M; k++, i++) {
+        const gordo = hBorde[l] ? 1 + 0.9 * smooth(0.37, 0.47, lX[i]) : 1;
+        lMed[i] = Math.max(0.25, gordo * P.grosor * esc / 2);
+      }
+    }
+  }
+
+  // Separación (px, perpendicular a la línea) entre cada muestra y sus vecinas de la misma familia
+  function espaciado(px, py, out) {
+    for (let fam = 0; fam < 2; fam++) {
+      const l0 = fam ? nPri : 0, n = fam ? nLin - nPri : nPri;
+      for (let a = 0; a < n; a++) {
+        const base = (l0 + a) * M;
+        for (let k = 0; k < M; k++) {
+          const i = base + k, i0 = k > 0 ? i - 1 : i, i1 = k < M - 1 ? i + 1 : i;
+          let tx = px[i1] - px[i0], ty = py[i1] - py[i0];
+          const inv = 1 / (Math.sqrt(tx * tx + ty * ty) + 1e-6);
+          tx *= inv; ty *= inv;
+          let sum = 0, c = 0;
+          if (a > 0) { const j = i - M; sum += Math.abs((px[j] - px[i]) * ty - (py[j] - py[i]) * tx); c++; }
+          if (a < n - 1) { const j = i + M; sum += Math.abs((px[j] - px[i]) * ty - (py[j] - py[i]) * tx); c++; }
+          out[i] = c ? sum / c : 99;
+        }
+      }
+    }
+  }
+
+  // Alfa final de cada muestra de línea. La luz se suma (donde se cruzan líneas brilla más), pero
+  // una familia no puede pasar de su tope por unidad de alto: si sus líneas se juntan, cada una
+  // aporta menos. Así el nudo es muy luminoso sin volverse una placa blanca, y se siguen leyendo
+  // las líneas. Donde quedan a 1–3 px se ensanchan un poco (con la misma luz) para que no hagan moiré.
+  function prepararLineas() {
+    espaciado(lpx, lpy, lSd);
+    // Entereza: si el empuje estira un tramo de línea mucho más que su largo en casa (la línea quedó
+    // a los dos lados del hueco que abre el puntero), ese tramo se apaga: así no cruza el hueco una
+    // cuerda recta. 1 = tramo sano, 0 = tramo roto.
+    for (let l = 0; l < nLin; l++) {
+      let prev = 1;
+      for (let k = 0, i = l * M; k < M; k++, i++) {
+        let r = 1;
+        if (k < M - 1) {
+          const hx = lhx[i + 1] - lhx[i], hy = lhy[i + 1] - lhy[i];
+          const dx = lpx[i + 1] - lpx[i], dy = lpy[i + 1] - lpy[i];
+          r = Math.sqrt((dx * dx + dy * dy) / (hx * hx + hy * hy + 1));
+        }
+        const seg = r < 1.35 ? 1 : r > 2.4 ? 0 : (2.4 - r) / 1.05;
+        lK[i] = Math.min(prev, seg); prev = seg;
+      }
+    }
+    const [b0, b1] = P.brillo.principal, be = P.brillo.enves, [m0, m1] = P.moire;
+    for (let l = 0; l < nLin; l++) {
+      const enves = hEnves[l], Bm = enves ? be : b0 + (b1 - b0) * hW[l], N = enves ? nLin - nPri : nPri;
+      for (let k = 0, i = l * M; k < M; k++, i++) {
+        let a = lA[i];
+        const br = lgl[i];
+        if (br > 0) a = Math.min(1, a * (1 + 1.4 * br) + 0.12 * br);
+        a *= lK[i];
+        if (a < 0.004) { lAf[i] = 0; lFw[i] = 1; continue; }
+        const wL = 2 * lMed[i], s = lSd[i];
+        const tope = Bm * (1 + 0.35 * Math.min(br, 1)) * (s + wL / N) / wL;
+        if (a > tope) a = tope;
+        let f = 1;
+        if (s > wL && s < m1) f = 1 + Math.max(0, 0.9 * s / wL - 1) * (1 - smooth(m0, m1, s));
+        lFw[i] = f; lAf[i] = a / f;
       }
     }
   }
@@ -587,7 +745,7 @@
   let vFijo, vVivo, nInd = 0, datosPuntos;    // lo que se les envía
   let lE;                                     // medio ancho (más el borde suave) de cada muestra de línea, en px
   let perdido = false;                        // el navegador puede quitar el contexto un momento
-  const N_ECO = 51, N_NUC = 49, N_LUZ = 12;   // muestras de cada eco y del nudo; número de luces
+  const N_ECO = 51, N_LUZ = 10;              // muestras de cada eco; luces suaves del nudo
   const CURVAS_ECO = [0, 0.3, 0.62, 1];       // qué filas de la superficie dibuja cada eco
 
   function prepararGL() {
@@ -607,7 +765,8 @@
     };
     // Cintas. Cada vértice trae d = (x, y, alfa) y e = (u, v, medida, tipo):
     //   tipo 0, línea nítida de medio ancho «medida» px · tipo 1, resplandor que se apaga hacia los lados
-    //   tipo 2, luz redonda (medida = qué tan rápido se apaga) · tipo 3, relleno liso
+    //   tipo 2, luz redonda (medida = qué tan rápido se apaga) · tipo 3, relleno liso (hoy sin uso)
+    //   tipo 4, resplandor de un solo lado: máximo en la línea, se apaga hacia afuera
     glC = programa(`
       attribute vec3 d; attribute vec4 e; uniform vec2 u; varying vec4 ve; varying float va;
       void main() { gl_Position = vec4(d.x * u.x - 1.0, 1.0 - d.y * u.y, 0.0, 1.0); ve = e; va = d.z; }`, `
@@ -616,6 +775,7 @@
         float c = 1.0;
         if (ve.w < 0.5) { float m = ve.z * r; c = clamp(m + 0.5 - abs(ve.y) * (m + 1.0), 0.0, 1.0); }
         else if (ve.w < 1.5) { float q = 1.0 - abs(ve.y); c = q * q; }
+        else if (ve.w > 3.5) { float q = 0.5 + 0.5 * ve.y; c = q * q; }
         else if (ve.w < 2.5) {
           c = pow(max(0.0, 1.0 - length(ve.xy)), ve.z);
           // un grano mínimo para que el degradado no haga escalones sobre el negro
@@ -647,9 +807,9 @@
     const cintas = [];             // [muestras, medida, tipo] de cada tira
     lE = new Float32Array(nL);
     for (let l = 0; l < nLin; l++) cintas.push([M, -1, 0]); // -1: el medio ancho va muestra a muestra (abajo)
-    cintas.push([M, 0, 1], [M, 0, 1]);                                           // resplandor de los dos bordes
+    cintas.push([M, 0, 1], [M, 0, 1], [M, 0, 1]);           // resplandores: borde de arriba (fino y del nudo) y filo
+    cintas.push([M, 0, 4], [M, 0, 4]);                      // resplandores de un lado: sobre el borde de arriba y bajo el filo
     for (let i = 0; i < ecos.length * CURVAS_ECO.length; i++) cintas.push([N_ECO, Math.max(0.25, 0.4 * esc), 0]);
-    cintas.push([N_NUC, 0, 3]);                                                  // relleno del nudo
     let nV = N_LUZ * 4, nI = N_LUZ * 6;
     for (const c of cintas) { nV += c[0] * 2; nI += (c[0] - 1) * 6; }
     vFijo = new Float32Array(nV * 4); vVivo = new Float32Array(nV * 3);
@@ -658,10 +818,9 @@
     for (const [n, med, tipo] of cintas) {
       for (let k = 0; k < n; k++, v += 2) {
         let medida = med;
-        if (med < 0) { // línea: el borde de arriba y el filo engordan del nudo hacia la derecha
-          const i = v >> 1, l = (i / M) | 0;
-          const gordo = hBorde[l] ? 1 + 0.9 * smooth(0.37, 0.47, lX[i]) : 1;
-          medida = Math.max(0.25, gordo * P.grosor * esc / 2);
+        if (med < 0) { // línea: su medio ancho, muestra a muestra
+          const i = v >> 1;
+          medida = lMed[i];
           lE[i] = medida + borde;
         }
         vFijo[o++] = 0; vFijo[o++] = 1; vFijo[o++] = medida; vFijo[o++] = tipo;
@@ -669,9 +828,8 @@
         if (k < n - 1) { ind[q++] = v; ind[q++] = v + 1; ind[q++] = v + 2; ind[q++] = v + 1; ind[q++] = v + 3; ind[q++] = v + 2; }
       }
     }
-    for (let i = 0; i < N_LUZ; i++, v += 4) {       // luces: 3 del halo (se apagan despacio) y las del nudo
-      const medida = i < 3 ? 2.6 : 2.0;
-      for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { vFijo[o++] = a; vFijo[o++] = b; vFijo[o++] = medida; vFijo[o++] = 2; }
+    for (let i = 0; i < N_LUZ; i++, v += 4) { // luces redondas (tipo 2): se apagan suave hacia afuera
+      for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { vFijo[o++] = a; vFijo[o++] = b; vFijo[o++] = 2.2; vFijo[o++] = 2; }
       ind[q++] = v; ind[q++] = v + 1; ind[q++] = v + 2; ind[q++] = v + 1; ind[q++] = v + 3; ind[q++] = v + 2;
     }
     nInd = nI;
@@ -683,26 +841,34 @@
     const g = gl, v = vVivo;
     let o = 0;
     // Una línea como tira de triángulos: a cada lado de cada muestra, medio ancho E.
-    // Con E = 0 es la línea misma (su ancho va muestra a muestra); con E > 0, su resplandor.
-    const cinta = (l, E, kA) => {
+    // Sin «luz» es la línea misma (ancho y alfa ya calculados con el tope de luz);
+    // con «luz» (una función de x) es un resplandor que sigue a la línea.
+    const cinta = (l, E, luz, lado) => { // lado: 1 = solo hacia arriba, -1 = solo hacia abajo
       for (let k = 0, i = l * M; k < M; k++, i++) {
         const i0 = k > 0 ? i - 1 : i, i1 = k < M - 1 ? i + 1 : i;
         let tx = lpx[i1] - lpx[i0], ty = lpy[i1] - lpy[i0];
-        const inv = (E || lE[i]) / (Math.sqrt(tx * tx + ty * ty) + 1e-6);
+        const inv = (luz ? E : lE[i] * lFw[i]) / (Math.sqrt(tx * tx + ty * ty) + 1e-6);
         tx *= inv; ty *= inv;
-        let a = lA[i];
-        const br = lgl[i];
-        if (br > 0) a = Math.min(1, a * (1 + 1.4 * br) + 0.12 * br);
-        a *= E ? kA * smooth(0.22, 0.44, lX[i]) : kA; // el resplandor nace cerca del nudo
+        const a = luz ? luz(lX[i]) * Math.min(1, lA[i] * 1.6) * lK[i] : lAf[i];
         const x = lpx[i], y = lpy[i];
-        v[o] = x - ty; v[o + 1] = y + tx; v[o + 2] = a; v[o + 3] = x + ty; v[o + 4] = y - tx; v[o + 5] = a;
+        if (lado) { // de un solo lado: un vértice en la línea y el otro afuera
+          v[o] = x; v[o + 1] = y; v[o + 2] = a; v[o + 3] = x + lado * ty; v[o + 4] = y - lado * tx; v[o + 5] = a;
+        } else {
+          v[o] = x - ty; v[o + 1] = y + tx; v[o + 2] = a; v[o + 3] = x + ty; v[o + 4] = y - tx; v[o + 5] = a;
+        }
         o += 6;
       }
     };
-    for (let l = 0; l < nLin; l++) cinta(l, 0, 1);
-    // resplandor difuso del borde de arriba (con el pliegue) y del filo
-    const kR = calidad > 0.7 ? P.resplandor * 2.5 : 0;
-    cinta(0, 15 * esc, kR); cinta(nPri - 1, 15 * esc, kR);
+    for (let l = 0; l < nLin; l++) cinta(l, 0, null);
+    // resplandores: a lo largo del borde de arriba (más fuerte en el nudo, ceñido a él) y del filo
+    const kR = calidad > 0.7 ? P.resplandor * 2.5 : 0, rn = P.resplandorNudo, xn = P.nudo[0] + 0.01;
+    const campana = (x, iz, de) => { const u = (x - xn) / (x < xn ? iz : de); return Math.exp(-u * u); };
+    cinta(0, 15 * esc, x => kR * smooth(0.22, 0.44, x) * (1 - 0.7 * campana(x, 0.05, 0.10))); // en el nudo ya hay luz de sobra
+    cinta(0, rn.ancho * esc, x => rn.cerca * campana(x, 0.05, 0.10));
+    cinta(nPri - 1, 15 * esc, x => kR * smooth(0.40, 0.52, x));
+    // en el nudo, la luz sale del borde de arriba hacia afuera (no se suma dentro del haz)
+    cinta(0, rn.anchoFuera * esc, x => rn.fuera * campana(x, 0.07, 0.13), 1);
+    cinta(nPri - 1, rn.anchoFuera * 1.1 * esc, x => rn.debajo * campana(x, 0.06, 0.10), -1);
 
     // ecos: la silueta de la forma tal como estaba hace un instante (solo se ven al mover el puntero)
     const f = P.forma, xk = P.nudo[0], eEco = Math.max(0.25, 0.4 * esc) + 1 / dpr;
@@ -723,28 +889,17 @@
       }
     }
 
-    // el nudo: relleno blanco entre los dos bordes de la hoja principal, que se desvanece a los lados
-    const est = 1 + f.estirar * def.x;
-    const X = x => ox + sx * (xk + (x - xk) * est);
-    const sup = x => { const q = (x - XA) * KINV, k = q | 0; return oy + sy * (St[k] + (St[k + 1] - St[k]) * (q - k)); };
-    const inf = x => { const q = (x - XA) * KINV, k = q | 0; return oy + sy * (It[k] + (It[k + 1] - It[k]) * (q - k)); };
-    const campana = x => { const u = (x - xk) / (x < xk ? 0.09 : 0.11); return Math.exp(-u * u); };
-    for (let j = 0; j < N_NUC; j++) {
-      const x = 0.30 + j * 0.36 / (N_NUC - 1), a = P.nucleo * campana(x), xx = X(x);
-      v[o] = xx; v[o + 1] = sup(x); v[o + 2] = a; v[o + 3] = xx; v[o + 4] = inf(x); v[o + 5] = a;
-      o += 6;
-    }
-    // luces: el halo del nudo y las manchas suaves a lo largo de la banda
-    const luz = (x, y, R, a) => {
-      v[o] = x - R; v[o + 1] = y - R; v[o + 2] = a; v[o + 3] = x + R; v[o + 4] = y - R; v[o + 5] = a;
-      v[o + 6] = x - R; v[o + 7] = y + R; v[o + 8] = a; v[o + 9] = x + R; v[o + 10] = y + R; v[o + 11] = a;
-      o += 12;
-    };
-    const halo = (dxn, dyn, radio, a) => luz(ox + sx * (xk + dxn * est), oy + sy * (P.nudo[1] + dyn), Math.max(sx, sy) * radio, a);
-    halo(0, 0, 0.30, P.halo); halo(0.06, -0.075, 0.16, P.halo * 0.8); halo(-0.05, 0.04, 0.12, P.halo * 0.6);
-    for (let j = 0; j < N_LUZ - 3; j++) {
-      const x = xk - 0.07 + j * 0.025, a = P.nucleo * 0.34 * campana(x), s0 = sup(x), i0 = inf(x);
-      luz(X(x), (s0 + i0) / 2, (i0 - s0) * 0.5 + 46 * esc, a);
+    // luces suaves alrededor del nudo, apoyadas sobre el borde de arriba (más luz encima que debajo)
+    {
+      const est = 1 + P.forma.estirar * def.x, R = rn.radio * esc;
+      for (let j = 0; j < N_LUZ; j++) {
+        const x = xn - 0.08 + j * 0.026, q = (x - XA) * KINV, k = q | 0, fr = q - k;
+        const X = ox + sx * (xk + (x - xk) * est), Y = oy + sy * (St[k] + (St[k + 1] - St[k]) * fr) - 0.25 * R;
+        const a = rn.amplio * 0.45 * campana(x, 0.08, 0.15);
+        v[o] = X - R; v[o + 1] = Y - R; v[o + 2] = a; v[o + 3] = X + R; v[o + 4] = Y - R; v[o + 5] = a;
+        v[o + 6] = X - R; v[o + 7] = Y + R; v[o + 8] = a; v[o + 9] = X + R; v[o + 10] = Y + R; v[o + 11] = a;
+        o += 12;
+      }
     }
 
     g.clear(g.COLOR_BUFFER_BIT);
@@ -803,58 +958,6 @@
   const NB = 16; // niveles de transparencia: se dibuja todo lo de un nivel de una sola vez
   const NL = 5;  // niveles del resplandor de los bordes
 
-  function dibujaHalo() {
-    const est = 1 + P.forma.estirar * def.x, xk = P.nudo[0];
-    const luz = (dxn, dyn, radio, alfa) => {
-      const x = ox + sx * (xk + dxn * est), y = oy + sy * (P.nudo[1] + dyn);
-      const R = Math.max(sx, sy) * radio;
-      const g = ctx.createRadialGradient(x, y, 0, x, y, R);
-      g.addColorStop(0, `rgba(255,255,255,${alfa})`);
-      g.addColorStop(0.3, `rgba(255,255,255,${alfa * 0.3})`);
-      g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(x - R, y - R, 2 * R, 2 * R);
-    };
-    ctx.globalAlpha = 1;
-    luz(0, 0, 0.30, P.halo);
-    luz(0.06, -0.075, 0.16, P.halo * 0.8);
-    luz(-0.05, 0.04, 0.12, P.halo * 0.6);
-  }
-
-  // El nudo: un relleno blanco entre los dos bordes de la hoja principal, con su resplandor
-  function dibujaNucleo() {
-    if (P.nucleo <= 0) return;
-    const est = 1 + P.forma.estirar * def.x, xk = P.nudo[0];
-    const X = x => ox + sx * (xk + (x - xk) * est);
-    const sup = x => { const q = (x - XA) * KINV, k = q | 0; return oy + sy * (St[k] + (St[k + 1] - St[k]) * (q - k)); };
-    const inf = x => { const q = (x - XA) * KINV, k = q | 0; return oy + sy * (It[k] + (It[k + 1] - It[k]) * (q - k)); };
-    const campana = x => { const u = (x - xk) / (x < xk ? 0.09 : 0.11); return Math.exp(-u * u); };
-    // relleno, en tiras verticales que se desvanecen hacia los lados
-    const x0 = 0.30, x1 = 0.66, n = 48, paso = (x1 - x0) / n;
-    ctx.fillStyle = '#fff';
-    for (let i = 0; i < n; i++) {
-      const xa = x0 + i * paso, xb = xa + paso, a = P.nucleo * campana(xa + paso / 2);
-      if (a < 0.004) continue;
-      ctx.globalAlpha = a;
-      ctx.beginPath();
-      ctx.moveTo(X(xa), sup(xa)); ctx.lineTo(X(xb), sup(xb));
-      ctx.lineTo(X(xb), inf(xb)); ctx.lineTo(X(xa), inf(xa));
-      ctx.fill();
-    }
-    // resplandor: manchas de luz suaves a lo largo de la banda
-    ctx.globalAlpha = 1;
-    for (let x = xk - 0.07; x <= xk + 0.13; x += 0.025) {
-      const a = P.nucleo * 0.34 * campana(x), cx0 = X(x), cy0 = (sup(x) + inf(x)) / 2;
-      const R = (inf(x) - sup(x)) * 0.5 + 46 * esc;
-      const g = ctx.createRadialGradient(cx0, cy0, 0, cx0, cy0, R);
-      g.addColorStop(0, `rgba(255,255,255,${a})`);
-      g.addColorStop(0.45, `rgba(255,255,255,${a * 0.4})`);
-      g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(cx0 - R, cy0 - R, 2 * R, 2 * R);
-    }
-  }
-
   // Ecos: la silueta de la forma tal como estaba hace un instante (solo se ven al mover el puntero)
   function dibujaEcos() {
     const f = P.forma, xk = P.nudo[0];
@@ -891,10 +994,8 @@
       const tram = ((l * 0.618) % 1) - 0.5; // cada línea cambia de nivel en un sitio distinto: sin bandas
       const borde = hBorde[l];
       for (let k = 0, i = l * M; k < M - 1; k++, i++) {
-        let a = (lA[i] + lA[i + 1]) * 0.5;
+        const a = (lAf[i] * lFw[i] + lAf[i + 1] * lFw[i + 1]) * 0.5; // alfa con el tope de luz (aquí sin ensanche)
         if (a < 0.012 || (lpy[i] > lim && lpy[i + 1] > lim)) { prev = prevL = -1; continue; }
-        const g = lgl[i];
-        if (g > 0) a = Math.min(1, a * (1 + 1.4 * g) + 0.12 * g);
         let b = (a * NB + tram) | 0; if (b >= NB) b = NB - 1; else if (b < 0) b = 0;
         if (b !== prev) { paths[b].moveTo(lpx[i], lpy[i]); if (borde) bordes[b].moveTo(lpx[i], lpy[i]); }
         paths[b].lineTo(lpx[i + 1], lpy[i + 1]);
@@ -948,14 +1049,12 @@
     ctx.globalAlpha = 1;
     ctx.clearRect(0, 0, W, H);
     ctx.globalCompositeOperation = 'lighter';
-    dibujaHalo();
-    dibujaNucleo();
     dibujaEcos();
     dibujaLineas();
     dibujaPuntos();
   }
 
-  const dibujar = () => { if (!gl) dibujar2D(); else if (!perdido) dibujarGL(); };
+  const dibujar = () => { prepararLineas(); if (!gl) dibujar2D(); else if (!perdido) dibujarGL(); };
 
   // ───────────────────────────── Ciclo ─────────────────────────────
   let msMedia = 0, cpsMedia = 60; // medición: costo por cuadro y cuadros por segundo
