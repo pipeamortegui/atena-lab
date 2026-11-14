@@ -47,6 +47,7 @@
   const separacion = t => FORMA.sepPaso * t + curva(FORMA.sepTope, 1, t);   // en anchos de tarjeta, ya proyectada en pantalla
 
   // ---------- Tarjetas ----------
+  const SVG = 'http://www.w3.org/2000/svg';
   const items = [];
   const tarjetas = [];
   const imagenes = [];
@@ -56,12 +57,17 @@
     li.className = 'pb-item';
     li.setAttribute('aria-posinset', i + 1);
     li.setAttribute('aria-setsize', n);
+    // Portadas a color: gris a los lados y color al centro, salvo que el dato «color» diga otra cosa. Los .svg no se tocan.
+    const color = p.color || (/\.svg([?#]|$)/i.test(p.imagen || '') ? '' : 'centro');
+    if (color === 'centro' || color === 'nunca') li.classList.add('pb-color-' + color);
 
     const tarjeta = document.createElement(p.enlace ? 'a' : 'button');
     tarjeta.className = 'pb-card';
     if (p.enlace) {
+      const fuera = /^https?:\/\//i.test(p.enlace);
       tarjeta.href = p.enlace;
-      if (/^https?:\/\//i.test(p.enlace)) { tarjeta.target = '_blank'; tarjeta.rel = 'noopener'; }
+      if (fuera) { tarjeta.target = '_blank'; tarjeta.rel = 'noopener'; }
+      tarjeta.setAttribute('aria-label', p.titulo + (p.dato ? ', ' + p.dato : '') + (fuera ? ' — open project site, opens in a new tab' : ' — open project'));
     } else {
       tarjeta.type = 'button';
     }
@@ -94,6 +100,18 @@
     const velo = document.createElement('span');
     velo.className = 'pb-velo';
     tarjeta.append(pie, velo);
+    if (p.enlace) {   // insignia con flecha en la esquina: avisa que la tarjeta lleva a alguna parte
+      const insignia = document.createElement('span');
+      insignia.className = 'pb-ir';
+      insignia.setAttribute('aria-hidden', 'true');
+      const flecha = document.createElementNS(SVG, 'svg');
+      flecha.setAttribute('viewBox', '0 0 16 16');
+      const trazo = document.createElementNS(SVG, 'path');
+      trazo.setAttribute('d', 'M4,12 L12,4 M5.5,4 H12 V10.5');
+      flecha.appendChild(trazo);
+      insignia.appendChild(flecha);
+      tarjeta.insertBefore(insignia, velo);
+    }
 
     li.appendChild(tarjeta);
     fragmento.appendChild(li);

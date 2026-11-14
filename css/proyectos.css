@@ -96,6 +96,38 @@
 }
 .pb-card:focus-visible { outline: 2px solid #fff; outline-offset: 5px; }
 
+/* Insignia con flecha en la esquina, solo en las tarjetas que llevan a alguna parte (las que tienen «enlace»).
+   Mismo lenguaje que los botones de la barra: círculo de línea fina. */
+.pb-ir {
+  position: absolute; z-index: 2;
+  top: calc(var(--pb-w) * .06); right: calc(var(--pb-w) * .06);
+  display: grid; place-items: center;
+  width: clamp(26px, calc(var(--pb-w) * .1), 40px); aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, .34); border-radius: 50%;
+  background: rgba(5, 5, 5, .38);
+  color: var(--ink);
+  transition: background .4s, border-color .4s;
+}
+.pb-ir svg {
+  display: block; width: 42%; height: 42%;
+  fill: none; stroke: currentColor; stroke-width: 1.5;
+  transition: transform .4s cubic-bezier(.22, 1, .36, 1);
+}
+.pb.es-3d .pb-item.es-activa .pb-card:hover .pb-ir,
+.pb.es-3d .pb-item.es-activa .pb-card:focus-visible .pb-ir { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .6); }
+.pb.es-3d .pb-item.es-activa .pb-card:hover .pb-ir svg,
+.pb.es-3d .pb-item.es-activa .pb-card:focus-visible .pb-ir svg { transform: translate(1px, -1px); }
+
+/* ---------- Portadas a color (fotos, renders) ----------
+   La barra es en blanco y negro. Una portada a color se ve gris mientras está a un lado
+   y recupera su color cuando llega al centro. Para UNA portada se decide con el dato «color»
+   de js/proyectos-datos.js ("centro", "siempre" o "nunca"). Para TODAS a la vez, aquí:
+     · siempre a color: borrar la regla 1.
+     · siempre en gris: en la regla 1, quitar «:not(.es-activa)». */
+.pb.es-3d .pb-color-centro:not(.es-activa) .pb-card img { filter: grayscale(1); }   /* regla 1 */
+.pb-color-nunca .pb-card img { filter: grayscale(1); }
+.pb-color-centro .pb-card img { transition: filter .8s cubic-bezier(.22, 1, .36, 1); }
+
 /* ---------- Estado 3D: el arco ---------- */
 .pb.es-3d .pb-stage {
   height: calc(var(--pb-h) + 2 * var(--pb-aire));
@@ -192,5 +224,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pb-card, .pb-btn { transition: none; }
+  .pb-card, .pb-card img, .pb-ir, .pb-ir svg, .pb-btn { transition: none; }
 }
