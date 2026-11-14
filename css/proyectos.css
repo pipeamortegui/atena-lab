@@ -161,6 +161,23 @@
 }
 .pb-contador .pb-actual { color: var(--ink); }
 
+/* Pausa / reanudar el avance automático: un círculo aparte, a la derecha de la pastilla,
+   para que el contador siga centrado bajo la tarjeta. Solo se ve cuando hay avance automático. */
+.pb-pausa { display: none; }
+.pb.es-3d .pb-controles { position: relative; }
+.pb.es-3d.con-avance .pb-pausa {
+  display: grid;
+  position: absolute; left: calc(100% + 10px); top: 50%;
+  transform: translateY(-50%);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, .035);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
+.pb.es-3d.con-avance .pb-pausa:hover { background: rgba(255, 255, 255, .08); }
+.pb-pausa .pb-ico-seguir { display: none; }
+.pb.en-pausa .pb-pausa .pb-ico-pausa { display: none; }
+.pb.en-pausa .pb-pausa .pb-ico-seguir { display: block; }
+
 /* ---------- Celular ---------- */
 @media (max-width: 760px) {
   .pb {
@@ -169,6 +186,9 @@
     margin-left: calc(-1 * var(--gutter));
   }
   .pb-btn { width: 44px; height: 44px; }
+}
+@media (max-width: 360px) {   /* pantallas muy angostas: el botón de pausa se arrima para no salirse */
+  .pb.es-3d.con-avance .pb-pausa { left: calc(100% + 4px); width: 40px; height: 40px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

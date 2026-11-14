@@ -2,8 +2,16 @@
 // Carrusel 3D propio, sin bibliotecas. Lee la lista de js/proyectos-datos.js,
 // arma las tarjetas y las acomoda en arco. Se navega con clic, arrastre (mouse o dedo),
 // rueda horizontal o trackpad, flechas del teclado y los botones anterior / siguiente.
+// Además avanza sola de un proyecto al siguiente, en bucle (ver AVANCE aquí abajo).
 (() => {
   'use strict';
+
+  // ---------- Avance automático: lo único que hay que tocar para cambiar su ritmo o apagarlo ----------
+  const AVANCE = {
+    activo: true,     // false = la barra no avanza sola (y desaparece el botón de pausa)
+    cadaMs: 4000,     // tiempo entre un giro y el siguiente, en milisegundos (4000 = 4 segundos)
+    esperaMs: 7000,   // después de que alguien navega a mano, cuánto espera antes de retomar
+  };
 
   const raiz = document.getElementById('proyectos');
   if (!raiz) return;
@@ -138,7 +146,7 @@
   }
 
   // Marca cuál es la tarjeta activa: contador, aria-current y cuál recibe el foco con Tab.
-  function marcar(idx) {
+  function marcar(idx, anunciar = true) {
     if (idx === actual) return;
     const primera = actual < 0;   // al cargar no se anuncia nada: solo cuando alguien navega
     actual = idx;
@@ -149,7 +157,7 @@
       tarjetas[i].tabIndex = activa ? 0 : -1;
     }
     if (elActual) elActual.textContent = dos(idx + 1);
-    if (elVoz && !primera) {
+    if (elVoz && !primera && anunciar) {   // los giros automáticos no se anuncian: saturarían a un lector de pantalla
       clearTimeout(tVoz);
       tVoz = setTimeout(() => { elVoz.textContent = `${datos[idx].titulo}, ${idx + 1} of ${n}`; }, 350);
     }
@@ -191,10 +199,10 @@
     }
     pintar();
   }
-  function irA(k, velocidadInicial) {
+  function irA(k, velocidadInicial, automatico = false) {
     objetivo = k;
     if (typeof velocidadInicial === 'number') vel = velocidadInicial;
-    marcar(mod(k, n));
+    marcar(mod(k, n), !automatico);
     if (mqQuieto.matches || document.hidden) {   // sin animación de giro: salta directo
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
@@ -205,6 +213,45 @@
     if (!raf) { tPrev = performance.now(); raf = requestAnimationFrame(cuadro); }
   }
   const mover = pasos => irA(objetivo + pasos);
+
+  // ---------- Avance automático ----------
+  // Un solo temporizador, que se vuelve a armar después de cada giro: así nunca se acumulan giros atrasados.
+  // Gira solo si nada lo impide: ni pausa, ni puntero encima de las tarjetas, ni foco de teclado dentro,
+  // ni dedo o botón apretado, ni la barra fuera de la pantalla, ni la pestaña oculta, ni «reducir movimiento».
+  const btnPausa = raiz.querySelector('.pb-pausa');
+  let tAvance = 0;
+  let noAntesDe = 0;       // tras una navegación a mano, no retomar antes de este instante
+  let pausado = false;     // lo decidió la persona con el botón de pausa
+  let encima = false;      // puntero del mouse sobre las tarjetas
+  let tocando = false;     // dedo o botón del mouse apretado sobre la barra
+  let enVista = !('IntersectionObserver' in window);
+  const hayAvance = () => AVANCE.activo && n > 1 && !mqQuieto.matches;
+  const focoDeTeclado = () => {
+    const a = document.activeElement;
+    if (!a || a === btnPausa || !raiz.contains(a)) return false;
+    try { return a.matches(':focus-visible'); } catch (_) { return true; }
+  };
+  const puedeGirar = () => hayAvance() && !pausado && enVista && !document.hidden && !encima && !tocando && !focoDeTeclado();
+  function armar(ms) {
+    clearTimeout(tAvance);
+    tAvance = 0;
+    if (puedeGirar()) tAvance = setTimeout(girar, ms);
+  }
+  function girar() {
+    tAvance = 0;
+    if (!puedeGirar()) return;
+    irA(objetivo + 1, undefined, true);   // siempre hacia adelante: de la última pasa a la primera sin rebobinar
+    armar(AVANCE.cadaMs);
+  }
+  // Se llama cada vez que cambia algo que lo frena o lo suelta: vuelve a contar desde cero.
+  const retomar = () => armar(Math.max(AVANCE.cadaMs, noAntesDe - performance.now()));
+  // Alguien navegó a mano: se le deja más tiempo con la tarjeta que eligió.
+  const manual = () => { noAntesDe = performance.now() + AVANCE.esperaMs; retomar(); };
+  function pintarPausa() {
+    raiz.classList.toggle('con-avance', hayAvance());
+    raiz.classList.toggle('en-pausa', pausado);
+    if (btnPausa) btnPausa.setAttribute('aria-label', pausado ? 'Resume auto-advance' : 'Pause auto-advance');
+  }
 
   // ---------- Clic: una lateral viene al centro; la central abre su enlace si lo tiene ----------
   let bloquearClic = false;
@@ -228,6 +275,8 @@
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     bloquearClic = false;
     arr = { id: e.pointerId, x0: e.clientX, y0: e.clientY, pos0: pos, activo: false, muestras: [] };
+    tocando = true;
+    retomar();
   });
   escena.addEventListener('pointermove', e => {
     if (!arr || e.pointerId !== arr.id) return;
@@ -266,6 +315,7 @@
     let destino = Math.round(pos + v * .2);
     if (destino === a.origen && Math.abs(v) > .9) destino += Math.sign(v);   // un toque rápido y corto también pasa una
     irA(destino, v);
+    manual();
   }
   escena.addEventListener('pointerup', soltar);
   escena.addEventListener('pointercancel', soltar);
@@ -280,6 +330,7 @@
     let dx = e.deltaX;
     if (e.deltaMode === 1) dx *= 32; else if (e.deltaMode === 2) dx *= W;
     if (!tRueda) { detener(); ruedaOrigen = Math.round(pos); }
+    manual();
     pos += dx / (paso * 1.15);
     marcar(mod(Math.round(pos), n));
     pintar();
@@ -304,6 +355,7 @@
     e.preventDefault();
     const focoEnTarjeta = pista.contains(document.activeElement);
     irA(destino);
+    manual();
     if (focoEnTarjeta) {
       items[actual].style.display = '';
       tarjetas[actual].focus({ preventScroll: true });
@@ -317,11 +369,42 @@
   if (btnNext) btnNext.addEventListener('click', () => mover(1));
   if (controles && n < 2) controles.style.display = 'none';
 
+  // ---------- Qué frena y qué suelta el avance automático ----------
+  raiz.addEventListener('click', e => {                 // cualquier clic en la barra es navegación a mano…
+    if (btnPausa && btnPausa.contains(e.target)) return; // …menos el del propio botón de pausa
+    manual();
+  });
+  if (btnPausa) btnPausa.addEventListener('click', () => {
+    pausado = !pausado;
+    pintarPausa();
+    retomar();
+  });
+  escena.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') { encima = true; retomar(); } });
+  escena.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') { encima = false; retomar(); } });
+  const finToque = () => { if (tocando) { tocando = false; retomar(); } };
+  window.addEventListener('pointerup', finToque);
+  window.addEventListener('pointercancel', finToque);
+  raiz.addEventListener('focusin', () => setTimeout(retomar, 0));
+  raiz.addEventListener('focusout', () => setTimeout(retomar, 0));
+  document.addEventListener('visibilitychange', retomar);
+  const alCambiarQuieto = () => { pintarPausa(); retomar(); };
+  if (mqQuieto.addEventListener) mqQuieto.addEventListener('change', alCambiarQuieto);
+  else if (mqQuieto.addListener) mqQuieto.addListener(alCambiarQuieto);
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(entradas => {
+      enVista = entradas[entradas.length - 1].intersectionRatio >= .3;   // cuenta como «a la vista» con un tercio de la barra en pantalla
+      if (!enVista) encima = false;
+      retomar();
+    }, { threshold: [0, .3] }).observe(escena);
+  }
+
   // ---------- Arranque ----------
   raiz.classList.add('es-3d');
   medir();
   marcar(0);
   pintar();
+  pintarPausa();
+  retomar();
 
   if ('ResizeObserver' in window) new ResizeObserver(() => { medir(); pintar(); }).observe(escena);
   else window.addEventListener('resize', () => { medir(); pintar(); });
