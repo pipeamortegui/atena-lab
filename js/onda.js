@@ -60,9 +60,9 @@
     ondulacion: 0.004,         // vaivén de las líneas del envés
     // dónde pasa cada fila de línea a puntos: no todas a la vez (no hay frontera)
     transicion: {
-      desde: 0.52,             // x donde empiezan a romperse las filas del centro
+      desde: 0.50,             // x donde empiezan a romperse las filas del centro
       bordes: 0.06,            // las filas de los bordes siguen siendo línea este tanto más
-      largo: 0.10,             // tramo en que una fila se va rompiendo
+      largo: 0.04,             // tramo en que la línea cede el paso a sus perlas (que la continúan)
       enves: 0.465,            // el haz que cruza se rompe nada más salir del cruce
       azar: 0.03,              // desorden entre filas
     },
@@ -80,18 +80,24 @@
     moire: [1.2, 2.2],         // líneas a esta distancia (px) se ensanchan y suavizan: así no hacen moiré
 
     // — Superficie de puntos (tramo derecho) —
+    // Cada fila es un collar de perlas: junto al nudo las perlas se tocan (la fila parece una
+    // línea) y, al alejarse, se separan y crecen poco a poco hasta ser puntos sueltos.
     puntosX: [0.44, 1.16],     // de dónde a dónde corren las filas de puntos
-    puntosCentro: 140,         // puntos por fila en el centro de la superficie
-    puntosBorde: 340,          // puntos por fila en los bordes (diminutos y juntos: parecen línea)
-    crecerCentro: 0.20,        // menor = los puntos se separan más al alejarse del nudo (centro)
-    crecerBorde: 1.5,          // ídem en los bordes (grande = casi parejos)
-    pliegue: 0.64,             // cuánto se aprietan las filas contra los dos bordes (0 = parejas)
-    radio: [0.5, 2.8],         // radio del punto: mínimo, y lo que crece lejos del nudo
-    bajoAncho: 0.17,           // hasta dónde cuelga el envés bajo el filo en el borde derecho
-    bajoMin: 0.006,            // alto del envés justo al salir del nudo (filas finas y juntas)
-    puntosBajo: 70,            // puntos por fila del envés
-    qBajo: 0.30,               // menor = los puntos del envés más juntos junto al nudo
-    radioBajo: 2.1,            // radio de los puntos del envés (lejos del nudo)
+    paso: 2.0,                 // separación (px, a 1706 de ancho) entre perlas de una fila al salir del nudo
+    crecerCentro: 0.10,        // menor = las perlas se separan más rápido al alejarse (filas del centro)
+    crecerBorde: 0.40,         // ídem en los bordes (grande = siguen juntas: parecen línea)
+    pliegue: 0.72,             // cuánto se aprietan las filas contra los dos bordes (0 = parejas)
+    radio: [0.72, 0.095],      // radio de la perla = a + b · separación (px)
+    perlas: [0.015, 0.11],     // tras romperse la línea: tramo en que las perlas se tocan, y en que se separan
+    // Filas de debajo del filo: se desprenden del filo una a una y se van abriendo en abanico
+    bajo: {
+      paso: [0.0070, 0.0125],  // separación entre filas al nacer y en el borde derecho (fracción del alto)
+      nace: 0.47,              // x donde nace la primera (pegada al filo)
+      cada: 0.022,             // cada fila nace este tanto más a la derecha que la anterior
+      crecer: 0.08,            // separación de perlas: como crecerCentro (menor = se espacian antes)
+      pasoPerlas: 2.4,         // separación de perlas en x0, px (como «paso»)
+      radio: 1.0,              // grosor de sus perlas respecto a las de la superficie
+    },
     dispersion: 0.45,          // cuántos puntos se apagan al azar en el extremo derecho
     temblor: 3.5,              // desorden (px) de los puntos en el extremo derecho
 
@@ -137,6 +143,7 @@
     rendimiento: {
       presupuesto: 11,         // ms de cálculo por cuadro que se toleran (un cuadro a 60 por segundo dura 16,7)
       calidadMinima: 0.4,      // hasta qué fracción de los puntos se puede bajar
+      cpsMinimo: 40,           // si los cuadros por segundo reales se quedan por debajo, también se baja
     },
 
     // — Celular (ancho < 760): el patrón abajo y el titular arriba —
@@ -184,7 +191,7 @@
   const GX = tabla();   // crecimiento del punto al alejarse del nudo
   const CAE = tabla();  // apagado al azar en el extremo derecho
   const TEM = tabla();  // desorden en el extremo derecho
-  const BAJ = tabla();  // cuánto cuelga el envés bajo el filo
+  const BAJ = tabla();  // separación entre filas de debajo del filo (alto de diseño)
   {
     const cs = curva(P.supPrincipal), ci = curva(P.infPrincipal), cu = curva(P.supEnves);
     const xu = P.supEnves[P.supEnves.length - 1][0];
@@ -198,7 +205,7 @@
       GX[k] = Math.pow(clamp01((x - 0.49) / 0.46), 0.8);
       CAE[k] = P.dispersion * smooth(0.80, 1.04, x);
       TEM[k] = smooth(0.62, 1.05, x);
-      BAJ[k] = P.bajoMin + P.bajoAncho * Math.pow(clamp01((x - 0.44) / 0.56), 1.25);
+      BAJ[k] = P.bajo.paso[0] + (P.bajo.paso[1] - P.bajo.paso[0]) * clamp01((x - P.bajo.nace) / (1 - P.bajo.nace));
     }
   }
   // Curvas del cuadro actual (ya deformadas) y las de cada eco
@@ -241,11 +248,15 @@
 
   // Reparto de los hilos a lo ancho de la hoja principal
   const repIzq = w => Math.pow(w, P.abanico);                                             // abanico
-  const repDer = w => w * (1 - P.pliegue) + P.pliegue * (1 - Math.cos(Math.PI * w)) / 2;  // superficie
-  // Escorzo de la superficie: 1 en el centro (de frente), pequeño en los bordes (de canto)
-  const escorzo = w => Math.sin(Math.PI * w);
-  // Dónde cuelga cada fila del envés bajo el filo (0 = pegada al filo)
-  const sdEnves = w => 0.08 + 0.92 * w;
+  // superficie: las filas se apiñan contra los dos bordes (se ven de canto: bordes blancos) y se
+  // abren en el centro (se ven de frente)
+  const cc = w => (1 - Math.cos(Math.PI * w)) / 2;
+  const repDer = w => w * (1 - P.pliegue) + P.pliegue * cc(cc(w));
+  // Escorzo de la superficie: 1 donde las filas están más abiertas (de frente), poco en los bordes (de canto)
+  const escorzo = w => {
+    const e = 1e-3, d = (repDer(Math.min(1, w + e)) - repDer(Math.max(0, w - e))) / (Math.min(1, w + e) - Math.max(0, w - e));
+    return clamp01(d / (1 - P.pliegue + P.pliegue * Math.PI * Math.PI / 4));
+  };
 
   // Muestras de una línea, de x0 a x1: más juntas cerca del nudo, donde la forma se curva.
   // Todas las líneas de una familia comparten las mismas x: así se puede medir cuánto se juntan.
@@ -308,11 +319,11 @@
       const f0 = enves ? tr.enves + 0.03 * w + tr.azar * 0.5 * (azar() - 0.5)
                        : tr.desde + tr.bordes * b2 + tr.azar * (azar() - 0.5);
       hF0[l] = f0;
-      const fin0 = f0, fin1 = f0 + (enves ? 0.05 : tr.largo);
+      const fin0 = f0, fin1 = f0 + tr.largo;
       let cola = 0; // cuánto sigue la línea más allá de donde nacen los puntos (bordes)
       if (enves) {
         hSI[l] = w * 0.93;          // a la izquierda: de la línea más alta (0) hacia el pliegue (1)
-        hSD[l] = sdEnves(w);        // a la derecha: cuánto cuelga bajo el filo
+        hSD[l] = l - nA + 1;        // a la derecha: a cuántas separaciones del filo cuelga
       } else {
         hSI[l] = repIzq(w); hSD[l] = repDer(w);
         if (l === 0 || l === nA - 1) { cola = 1; hBorde[l] = 1; }      // borde de arriba y filo
@@ -327,6 +338,7 @@
           // tenues arriba y lejos; más vivas al acercarse al nudo, que cruzan sin apagarse
           a = (0.2 + 0.5 * Math.pow(w, 1.3)) * smooth(0.17 - 0.17 * w, 0.35 - 0.22 * w, x);
           a = Math.max(a, 0.75 * smooth(0.30, 0.40, x));
+          a *= 1 - smooth(0.385, 0.425, x); // se funde al entrar al nudo (antes de su curva en S): las filas de debajo salen del filo
           a *= 1 - 0.8 * w * smooth(0.41, 0.45, x); // al llegar al filo se apagan las de abajo: sin borde duro
           // al cruzar el nudo el haz tiene los bordes suaves: su luz se funde con la del nudo, sin escalón
           const suave = smooth(0, 0.35, w) * smooth(1, 0.65, w);
@@ -350,33 +362,34 @@
     // — Puntos —
     nFil = nA + nB; // una fila de puntos por cada línea: la fila r sigue a la línea r
     fN = new Int32Array(nFil); fIni = new Int32Array(nFil + 1);
-    fQ = new Float32Array(nFil); fTh = new Float32Array(nFil); fEnves = new Uint8Array(nFil);
+    fQ = new Float32Array(nFil); fTh = new Float32Array(nFil); fEnves = new Uint8Array(nFil); // fQ: «c» del reparto; fTh: su ritmo
     fSI = new Float32Array(nFil); fSD = new Float32Array(nFil); fW = new Float32Array(nFil);
     fG = new Float32Array(nFil); fA = new Float32Array(nFil); fFase = new Float32Array(nFil);
     fNace = new Float32Array(nFil);
     const lx = P.puntosX[1] - P.puntosX[0];
     nD = 0;
     for (let r = 0; r < nFil; r++) {
-      let q;
+      // Reparto de las perlas a lo largo de la fila: x = x0 − c + c·e^(β·f), con f de 0 a 1. Así la
+      // separación crece en proporción a la distancia al nudo (más c = más pareja). El número de
+      // perlas sale de pedir que, al salir del nudo, estén a «paso» px.
+      let c;
       if (r < nA) {
         const w = r / (nA - 1), g = escorzo(w);
         fW[r] = w; fSI[r] = repIzq(w); fSD[r] = repDer(w); fG[r] = g;
-        fN[r] = Math.round((P.puntosBorde + (P.puntosCentro - P.puntosBorde) * Math.pow(g, 0.7)) * dens);
-        q = 1 / (1 / P.crecerBorde + (1 / P.crecerCentro - 1 / P.crecerBorde) * g);
-        fA[r] = 0.8 + 0.2 * g;
+        c = 1 / (1 / P.crecerBorde + (1 / P.crecerCentro - 1 / P.crecerBorde) * g);
+        fA[r] = 0.85 + 0.15 * g;
+        fNace[r] = hF0[r] - 0.03;  // las perlas aparecen (tocándose) justo antes de que se apague su línea
       } else {
-        const w = (r - nA) / (nB - 1); // 0..1 hacia abajo
-        fEnves[r] = 1; fW[r] = w; fSD[r] = sdEnves(w);
+        const j = r - nA, w = j / (nB - 1); // 0..1 hacia abajo
+        fEnves[r] = 1; fW[r] = w; fSD[r] = j + 1;
         fG[r] = 0.9 + 0.2 * azar();
-        fN[r] = Math.round(P.puntosBajo * (1 - 0.3 * w) * dens);
-        q = P.qBajo;
-        fA[r] = 0.95 - 0.25 * w;
+        c = P.bajo.crecer;
+        fA[r] = 0.95 - 0.2 * w;
+        fNace[r] = P.bajo.nace + P.bajo.cada * j + 0.02; // se ven cuando ya se despegaron del filo (una a una)
       }
-      // los puntos aparecen donde su línea empieza a romperse; en el envés, las filas de más abajo
-      // nacen más lejos: el haz de filas se abre desde el nudo
-      fNace[r] = hF0[r] - 0.035 + (r >= nA ? 0.22 * fW[r] * fW[r] : 0);
-      fN[r] = Math.max(8, fN[r]);
-      fQ[r] = q; fTh[r] = Math.atan(lx / q);
+      const beta = Math.log((lx + c) / c);
+      fN[r] = Math.max(8, Math.round(c * beta * 1706 / (r < nA ? P.paso : P.bajo.pasoPerlas) * dens));
+      fQ[r] = c; fTh[r] = beta;
       fFase[r] = azar();          // cada fila arranca corrida: la trama no hace columnas
       fIni[r] = nD; nD += fN[r];
     }
@@ -435,6 +448,9 @@
     }
   }
 
+  // Cuánto se ha despegado del filo la fila j de debajo (sD = j + 1) a la altura x: 0 pegada, 1 suelta
+  const despegue = (sD, x) => { const n0 = P.bajo.nace + P.bajo.cada * (sD - 1); return smooth(n0 - 0.035, n0 + 0.05, x); };
+
   // Altura de diseño de un hilo en la columna k de las tablas (fr = fracción entre k y k+1)
   function altura(k, fr, enves, sI, sD, tor) {
     const sup = St[k] + (St[k + 1] - St[k]) * fr, inf = It[k] + (It[k + 1] - It[k]) * fr;
@@ -448,7 +464,7 @@
         const h = 0.5 * (d + Math.sqrt(d * d + 4 * hm * hm));
         y += (u + h * sI) * (1 - cru);
       }
-      if (cru > 0) y += (inf + sD * BAJ[k]) * cru;
+      if (cru > 0) y += (inf + sD * BAJ[k] * despegue(sD, XA + (k + fr) / KINV)) * cru;
       return y;
     }
     const mez = MEZ[k];
@@ -480,38 +496,48 @@
   function filaLenta(r) {
     const xp0 = P.puntosX[0];
     const xFin = (W + 14 - ox) / sx + 0.05; // más allá no se ve: ni se calcula
-    const flujo = t * P.deriva, r0 = P.radio[0] * esc, r1 = P.radio[1] * esc;
-    const tem = P.temblor * esc, rB = P.radioBajo * esc;
-    const n = fN[r], q = fQ[r], th = fTh[r], sI = fSI[r], sD = fSD[r];
+    const flujo = t * P.deriva, [ra, rb] = P.radio, tem = P.temblor * esc;
+    const n = fN[r], c = fQ[r], beta = fTh[r], sI = fSI[r], sD = fSD[r];
     const g = fG[r], enves = fEnves[r], aFila = fA[r], w = fW[r], nace = fNace[r];
-    const off = flujo + fFase[r] / n, rg = r1 * Math.sqrt(g), tbFila = tem * (enves ? 1.6 : 0.3 + 0.7 * g);
+    const off = flujo + fFase[r] / n, tbFila = tem * (enves ? 1.6 : 0.3 + 0.7 * g);
+    const kpx = beta * sx / n;                      // separación (px) = kpx · (x − x0 + c)
+    const kr = enves ? P.bajo.radio : 0.75 + 0.25 * g; // grosor: las filas de canto (bordes), más finas
+    const [p0, p1] = P.perlas, toca = nace + 0.03 + p0, suelta = nace + 0.03 + p1; // perlas que se tocan → se separan
     // tope de luz de esta fila (como el de su línea) y dónde leer cuánto se juntan las filas
     const [b0, b1] = P.brillo.principal;
     const Bm = P.brillo.puntos * (enves ? 1 : 1 - (1 - b1 / b0) * w);
-    const Nf = enves ? nLin - nPri : nPri, idx = enves ? idxE : idxP, base = r * M, kq = q * th * sx / n;
+    const Nf = enves ? nLin - nPri : nPri, idx = enves ? idxE : idxP, base = r * M;
     let i = fIni[r];
     for (let j = 0; j < n; j++, i++) {
       let f = j / n + off; f -= f | 0;
-      const tg = Math.tan(th * f), x = xp0 + q * tg;
+      const e = c * Math.exp(beta * f), x = xp0 - c + e;
       if (x > xFin) { dal[i] = 0; continue; } // punto fuera de la vista
       const qq = (x - XA) * KINV, k = qq | 0, fr = qq - k;
       // alfa: aparecen donde su línea se rompe, se apagan al final y, al azar, en el extremo derecho
-      let a = aFila * smooth(nace, nace + 0.06, x);
-      if (f > 0.93) a *= 1 - smooth(0.93, 0.99, f);
+      let a = aFila * smooth(nace, nace + 0.03, x);
+      if (f > 0.95) a *= 1 - smooth(0.95, 0.995, f);
       const cae = CAE[k] + (enves ? 0.02 + 0.26 * w * TEM[k] : 0);
       if (cae > 0.001) a *= smooth(cae - 0.07, cae + 0.07, dRz[i]);
       if (a < 0.02) { dal[i] = 0; continue; } // punto apagado
-      const rad = (enves ? rB * g * (0.3 + 0.7 * smooth(0.45, 0.58, x)) : r0 + rg * GX[k]) * (0.82 + 0.3 * dRz[i]);
-      // donde los puntos y las filas se amontonan (junto al nudo) cada punto aporta menos luz:
-      // la fila se lee como una línea fina en vez de sumar blanco
-      const dlt = kq * (1 + tg * tg);                  // separación entre puntos de la fila, px
-      a *= Math.min(1, dlt / (2 * rad));
+      // tamaño ligado a la separación: junto a la rotura las perlas se tocan (la fila sigue siendo
+      // una línea) y luego crecen más despacio de lo que se separan
+      const dlt = kpx * e;                                   // separación entre perlas, px
+      let rad = (ra * esc + rb * dlt) * kr;
+      const unidas = enves ? 0 : 1 - smooth(toca, suelta, x); // (las de debajo no continúan una línea)
+      if (unidas > 0) rad = Math.max(rad, 0.5 * dlt * unidas);
+      rad *= 0.9 + 0.2 * dRz[i];
+      a *= Math.min(1, dlt / (2 * rad));                     // si se solapan, cada una aporta menos
       const ii = idx[k];
       if (ii >= 0) {
         const j0 = Math.min(M - 2, ii | 0), u = ii - j0;
         const sF = lS[base + j0] * (1 - u) + lS[base + j0 + 1] * u; // separación entre filas, px
         const wEq = Math.min(Math.PI * rad * rad / Math.max(dlt, 0.01), 2 * rad);
         a *= Math.min(1, Bm * (sF + wEq / Nf) / wEq);
+      }
+      // relevo: la perla solo aporta la luz que su propia línea ya no da (sin doble brillo ni costuras)
+      if (ii >= 0) {
+        const j0 = Math.min(M - 2, ii | 0), u = ii - j0;
+        a *= 1 - Math.min(1, lA[base + j0] * (1 - u) + lA[base + j0 + 1] * u);
       }
       dal[i] = a;
       if (a < 0.02) continue;
@@ -541,7 +567,7 @@
         const inf = It[k] + (It[k + 1] - It[k]) * fr;
         let y;
         if (enves) {
-          y = inf + dS[i] * BAJ[k];
+          y = inf + dS[i] * BAJ[k] * despegue(dS[i], dX[i]); // la fila sale despegándose del filo
         } else {
           const sup = St[k] + (St[k + 1] - St[k]) * fr;
           let s = dS[i];
@@ -845,7 +871,8 @@
     // con «luz» (una función de x) es un resplandor que sigue a la línea.
     const cinta = (l, E, luz, lado) => { // lado: 1 = solo hacia arriba, -1 = solo hacia abajo
       for (let k = 0, i = l * M; k < M; k++, i++) {
-        const i0 = k > 0 ? i - 1 : i, i1 = k < M - 1 ? i + 1 : i;
+        // los resplandores (anchos) toman la dirección de un tramo más largo: así no se pliegan en las curvas
+        const h = luz ? 5 : 1, i0 = Math.max(l * M, i - h), i1 = Math.min(l * M + M - 1, i + h);
         let tx = lpx[i1] - lpx[i0], ty = lpy[i1] - lpy[i0];
         const inv = (luz ? E : lE[i] * lFw[i]) / (Math.sqrt(tx * tx + ty * ty) + 1e-6);
         tx *= inv; ty *= inv;
@@ -1013,9 +1040,9 @@
     ctx.lineJoin = 'round';
     // resplandor difuso de los dos bordes
     if (P.resplandor > 0 && calidad > 0.7) {
-      for (let ancho = 30; ancho > 3; ancho *= 0.84) { // de ancho a fino: se suman en un degradado suave
+      for (const ancho of [26, 15, 8, 4]) { // de ancho a fino: se suman en un degradado (pocas pasadas: los trazos anchos cuestan)
         ctx.lineWidth = ancho * esc;
-        for (let b = 1; b < NL; b++) { ctx.globalAlpha = P.resplandor * 0.19 * (b + 0.5) / NL; ctx.stroke(luz[b]); }
+        for (let b = 1; b < NL; b++) { ctx.globalAlpha = P.resplandor * 0.55 * (b + 0.5) / NL; ctx.stroke(luz[b]); }
       }
     }
     ctx.lineWidth = Math.max(0.5, P.grosor * esc);
@@ -1074,7 +1101,9 @@
     dibujar();
     msMedia += (performance.now() - a - msMedia) * 0.05;
     // Red de seguridad: si calcular cada cuadro cuesta demasiado durante un segundo, baja la densidad
-    lentos = msMedia > P.rendimiento.presupuesto ? lentos + 1 : 0;
+    // (mira el cálculo y también los cuadros por segundo reales: el dibujo puede ser lo que no da abasto)
+    const visible = document.visibilityState === 'visible';
+    lentos = visible && (msMedia > P.rendimiento.presupuesto || cpsMedia < P.rendimiento.cpsMinimo) ? lentos + 1 : 0;
     if (lentos > 60 && calidad > P.rendimiento.calidadMinima) {
       calidad = Math.max(P.rendimiento.calidadMinima, calidad - 0.2);
       lentos = 0; msMedia *= 0.6;
