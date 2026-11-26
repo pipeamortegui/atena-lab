@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<!-- Generador de la tarjeta de la firma de correo (firma/tarjeta-atena-lab.jpg).
+     Fondo: fondo-tarjeta-v3.png (ChatGPT, 26-nov-2026, variante 3 elegida por Pipe).
+     Encima: logotipo vectorial real y datos en Atena Sans.
+     Se fotografía con Chrome sin cabeza a 1200x400 px (2x de 600x200). -->
+<style>
+  @font-face { font-family: "Atena Sans"; font-weight: 300; src: url("../../assets/fuentes/AtenaSans-Light.woff2") format("woff2"); }
+  @font-face { font-family: "Atena Sans"; font-weight: 400; src: url("../../assets/fuentes/AtenaSans-Regular.woff2") format("woff2"); }
+  @font-face { font-family: "Atena Sans"; font-weight: 500; src: url("../../assets/fuentes/AtenaSans-Medium.woff2") format("woff2"); }
+  @font-face { font-family: "Atena Sans"; font-weight: 600; src: url("../../assets/fuentes/AtenaSans-SemiBold.woff2") format("woff2"); }
+  html, body { margin: 0; padding: 0; background: #000; }
+  .tarjeta {
+    width: 1200px; height: 400px; position: relative; overflow: hidden;
+    background: #000 url("fondo-tarjeta-v3.png") center / 1200px 400px no-repeat;
+    font-family: "Atena Sans", Arial, sans-serif; color: #f2f0ea;
+  }
+  .logo { position: absolute; left: 66px; top: 58px; width: 250px; height: auto; display: block; }
+  .nombre {
+    position: absolute; left: 64px; top: 134px;
+    font-weight: 600; font-size: 29px; line-height: 37px; letter-spacing: 0.07em;
+    color: #f4f2ec;
+  }
+  .cargo {
+    position: absolute; left: 66px; top: 218px;
+    font-weight: 300; font-size: 19px; letter-spacing: 0.32em; color: #a9a8a5;
+  }
+  .filo {
+    position: absolute; left: 66px; top: 258px; width: 64px; height: 1px;
+    background: linear-gradient(90deg, #e9e7e1, rgba(233,231,225,0));
+  }
+  .datos {
+    position: absolute; left: 66px; top: 276px;
+    font-weight: 400; font-size: 19px; line-height: 29px; letter-spacing: 0.04em; color: #d6d4cf;
+  }
+</style>
+</head>
+<body>
+  <div class="tarjeta">
+    <img class="logo" src="../../assets/marca/logo-atena-lab.svg" alt="">
+    <div class="nombre">OBED FELIPE<br>HERRERA AMORTEGUI</div>
+    <div class="cargo">DIRECTOR</div>
+    <div class="filo"></div>
+    <div class="datos">+57 333 751 5398<br>director@atenalab.ai<br>atenalab.ai</div>
+  </div>
+</body>
+</html>
